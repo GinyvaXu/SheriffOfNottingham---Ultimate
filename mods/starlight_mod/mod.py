@@ -1,0 +1,112 @@
+# -*- coding: utf-8 -*-
+"""Starlight Colony reskin mod: renames all goods + key UI terms to a Starlight Colony theme.
+
+Text-only overlay: the card type keys stay unchanged, so this mod only affects
+the local client. During online play every player sees their own reskin while
+the server keeps running with the canonical rules. Ships disabled by default;
+enable it from the in-game Mods screen and restart.
+"""
+
+_NAMES_EN = {
+    'APPLE': 'Hydro-Apple',
+    'BLACK_MARKET': 'Smuggler Ring',
+    'BREAD': 'Nutrient Loaf',
+    'CHEESE': 'Synth-Cheese',
+    'CHICKEN': 'Vat Chicken',
+    'COFFEE': 'Gravity Coffee',
+    'CROSSBOW': 'Plasma Bow',
+    'ROYAL_BLUE_CHEESE': 'Blue Dwarf',
+    'ROYAL_CHICKEN': 'Geno-Chicken',
+    'ROYAL_COARSE_BREAD': 'Dust Bread',
+    'ROYAL_GOLD_APPLE': 'Star-Gold Apple',
+    'ROYAL_GOUDA_CHEESE': 'Cryo-Cheese',
+    'ROYAL_GREEN_APPLE': 'Terra Apple',
+    'ROYAL_RYE_BREAD': 'Asteroid Rye',
+    'SILK': 'Gossamer Silk',
+    'WINE': 'Nebula Wine',
+}
+
+_NAMES_ZH = {
+    'APPLE': '水培苹果',
+    'BLACK_MARKET': '走私星环',
+    'BREAD': '营养剂面包',
+    'CHEESE': '合成奶酪',
+    'CHICKEN': '培养鸡肉',
+    'COFFEE': '引力咖啡',
+    'CROSSBOW': '等离子弩',
+    'ROYAL_BLUE_CHEESE': '蓝矮星蓝纹',
+    'ROYAL_CHICKEN': '基因鸡肉',
+    'ROYAL_COARSE_BREAD': '星尘粗粮',
+    'ROYAL_GOLD_APPLE': '恒星金苹果',
+    'ROYAL_GOUDA_CHEESE': '冷冻奶酪',
+    'ROYAL_GREEN_APPLE': '移民苹果',
+    'ROYAL_RYE_BREAD': '小行星黑麦',
+    'SILK': '星纱丝绸',
+    'WINE': '星云酒',
+}
+
+_COLORS = {
+    'APPLE': (120, 230, 150),
+    'BLACK_MARKET': (90, 200, 255),
+    'BREAD': (200, 170, 110),
+    'CHEESE': (250, 230, 140),
+    'CHICKEN': (180, 140, 220),
+    'COFFEE': (140, 90, 60),
+    'CROSSBOW': (90, 160, 255),
+    'ROYAL_BLUE_CHEESE': (70, 110, 255),
+    'ROYAL_CHICKEN': (200, 120, 200),
+    'ROYAL_COARSE_BREAD': (120, 100, 80),
+    'ROYAL_GOLD_APPLE': (255, 210, 50),
+    'ROYAL_GOUDA_CHEESE': (230, 210, 120),
+    'ROYAL_GREEN_APPLE': (60, 190, 110),
+    'ROYAL_RYE_BREAD': (150, 120, 90),
+    'SILK': (150, 120, 255),
+    'WINE': (170, 90, 200),
+}
+
+_PHASES_EN = {
+    'DECLARE': 'Customs Form',
+    'INSPECT': 'Scan Hold',
+    'LOAD': 'Cargo Load',
+    'MARKET': 'Trade Deck',
+}
+_PHASES_ZH = {
+    'DECLARE': '报关',
+    'INSPECT': '货舱扫描',
+    'LOAD': '装载货舱',
+    'MARKET': '贸易甲板',
+}
+
+_UI_EN = {
+    'head': 'Phase: {phase}   Round {r}/{t}   Patrol AI: {name}',
+    'sheriff_tag': '[Patrol AI] ',
+    'subtitle': 'a space reskin | host a room + your own port forwarding',
+    'title': 'Sheriff of Starlight Colony',
+}
+_UI_ZH = {
+    'head': '阶段：{phase}   第 {r}/{t} 回合   巡逻AI：{name}',
+    'sheriff_tag': '【巡逻AI】',
+    'subtitle': '星际皮肤 | 房主开房 + 自行端口映射联机',
+    'title': '星光殖民地警长',
+}
+
+
+def register(api):
+    for key in _NAMES_EN:
+        api.rename(key, _NAMES_EN[key], _NAMES_ZH[key])
+
+    colors = dict(api.get("gui", "TYPE_COLOR"))
+    colors.update(_COLORS)
+    api.patch("gui", "TYPE_COLOR", colors)
+
+    phases = dict(api.get("lang", "PHASES"))
+    phases = {lng: dict(d) for lng, d in phases.items()}
+    phases["en"].update(_PHASES_EN)
+    phases["zh"].update(_PHASES_ZH)
+    api.patch("lang", "PHASES", phases)
+
+    ui = dict(api.get("lang", "UI"))
+    ui = {lng: dict(d) for lng, d in ui.items()}
+    ui["en"].update(_UI_EN)
+    ui["zh"].update(_UI_ZH)
+    api.patch("lang", "UI", ui)

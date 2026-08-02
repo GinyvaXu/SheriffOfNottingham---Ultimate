@@ -9,6 +9,7 @@ v1.2.0 新增**游戏图标**、对局装饰图案、**内置模组管理界面*
 v1.2.1 新增**自动更新**：启动时自动检测 + 主菜单「检查更新」按钮，可一键下载并静默安装 GitHub Release 上的新版。
 v1.2.2 修复**模组启用/禁用保存失败**（UTF-8 BOM 清单、只读文件）与**更新检查超时**（多源备份 + 重试 + 友好错误提示）。
 v1.2.3 彻底修复**安装到 Program Files 后 mod.json 不可写**：安装包为 mods 目录开放写入权限；游戏在保存失败时自动修复目录 ACL（icacls）；若安装目录仍不可写，则自动改用 %APPDATA% 下的用户模组目录并迁移已有模组。模组管理界面会显示当前实际使用的模组目录路径。
+v1.3.0 新增游戏内**模组市场**（浏览 GitHub 托管的模组目录、一键下载安装），内置 **5 款纯文本换皮模组**（赛博朋克 / 中世纪 / 星光殖民地 / 蒸汽朋克 / 奥术秘境），并让服务器**聊天消息跟随本地换皮**——换皮仅客户端生效，联机时每位玩家只能看到自己的版本。
 
 ## 文件结构
 
@@ -18,15 +19,19 @@ bot.py       人机 AI 模块（简单/普通/困难，运行在房主服务器�
 net.py       TCP 服务器 + JSON 协议 + 断线/重连 + 人机驱动
 gui.py       pygame 纯按钮界面
 gfx.py       程序化装饰图案（徽章/金币/卡背/图标）
-mods.py      模组加载器（exe 旁的 mods/ 目录，ModAPI 支持添加/修改）
+mods.py      模组加载器（exe 旁的 mods/ 目录，ModAPI 支持添加/修改/换名）
+market.py    模组市场：远程目录 + 一键下载安装
+mods_market.json  模组市场目录（raw + jsDelivr CDN 双源）
+mods_pack/   提供给游戏内市场的模组压缩包
 lang.py      中英双语文本 + 模组卡牌名重建
 main.py      入口（--version 弹出版本对话框）
-version.py   __version__ = "1.2.3"
+version.py   __version__ = "1.3.0"
 installer.iss  Inno Setup 安装脚本
 test_bot.py  无头人机自动化测试（完整对局 + 断线重连）
 test_ai_bots.py  大厅人机测试（房主添加机器人并完整对局）
 test_new_rules.py  皇家赏赐卡 & 黑市任务单元测试
 test_mods.py 模组加载器单元测试（注册/修改/启用/禁用/报错）
+test_reskin_mods.py  换皮模组 + 模组市场安装测试
 test_back_lobby.py  结算返回房间 + 同难度人机命名测试
 mods/        内置模组目录（README.md + example_mod + cyberpunk_mod，默认禁用）
 ```

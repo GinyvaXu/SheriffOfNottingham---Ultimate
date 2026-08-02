@@ -11,6 +11,7 @@ import pygame
 import game
 import gfx
 import lang
+import market
 import mods
 import net
 import updater
@@ -252,6 +253,11 @@ class App:
         self.mod_errors = list(mod_errors or [])
         self.mod_list = list(mod_list or [])
         self.mods_toast = ""
+        self.market_mods = []
+        self.market_error = ""
+        self.market_state = "idle"     # idle | loading | installing | ready
+        self.market_installing_id = ""
+        self.market_toast = ""
         self.update_state = "idle"
         self.update_info = None
         self.update_error = ""
@@ -343,6 +349,8 @@ class App:
             self._rebuild_menu_ui()
         elif self.screen_name == "mods":
             self._rebuild_mods_ui()
+        elif self.screen_name == "market":
+            self._rebuild_market_ui()
         elif self.screen_name == "update":
             self._rebuild_update_ui()
         elif self.screen_name == "lobby":
@@ -408,6 +416,9 @@ class App:
             for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "mods":
+            for b in self.buttons:
+                b.handle(ev)
+        elif self.screen_name == "market":
             for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "update":
@@ -510,7 +521,8 @@ class App:
             Button((470, 380, 150, 44), self._t("btn_join"), self._join_room),
             Button((640, 380, 100, 44), self._t("btn_quit"), lambda: setattr(self, "done", True)),
             Button((300, 440, 150, 44), self._t("btn_mods"), self._open_mods),
-            Button((470, 440, 150, 44), self._t("btn_update"), self._open_update),
+            Button((470, 440, 150, 44), self._t("btn_market"), self._open_market),
+            Button((640, 440, 150, 44), self._t("btn_update"), self._open_update),
             Button((610, 300, 90, 36), self._t("btn_paste"), self._paste_join),
             Button((W - 170, 20, 140, 40), self._t("btn_lang"), self._toggle_lang),
         ]
@@ -821,6 +833,123 @@ class App:
         for b in self.buttons:
             b.draw(self.screen)
 
+    # ---------- Mods Market ----------
+
+    def _open_market(self):
+        self.screen_name = "market"
+        self.market_toast = ""
+        if self.market_state == "idle":
+            self._refresh_market()
+        else:
+            self._rebuild_market_ui()
+
+    def _refresh_market(self):
+        if self.market_state in ("loading", "installing"):
+            return
+        self.market_state = "loading"
+        self.market_error = ""
+        self._rebuild_market_ui()
+        threading.Thread(target=self._thread_market_load, daemon=True).start()
+
+    def _thread_market_load(self):
+        mods_list, err = market.fetch_market()
+        self.market_mods = list(mods_list or [])
+        self.market_error = err or ""
+        self.market_state = "ready"
+        self._rebuild_market_ui()
+
+    def _install_market_mod(self, info):
+        if self.market_state == "installing":
+            return
+        self.market_state = "installing"
+        self.market_installing_id = str(info.get("id") or info.get("folder") or "?")
+        self.market_toast = self._t("market_installing")
+        self._rebuild_market_ui()
+        threading.Thread(target=self._thread_market_install, args=(info,),
+                         daemon=True).start()
+
+    def _thread_market_install(self, info):
+        ok, msg = market.install_mod(info)
+        self.market_state = "ready"
+        self.market_installing_id = ""
+        if ok:
+            self.market_toast = self._t("market_installed")
+        else:
+            self.market_toast = self._t("market_failed", e=msg)
+        self._rebuild_market_ui()
+
+    def _market_label(self, info, status, ver):
+        mid = str(info.get("id") or info.get("folder") or "?")
+        name = info.get("name") or {}
+        label = name.get(self.lang) or name.get("en") or mid
+        mver = str(info.get("version") or "0")
+        if status == "missing":
+            return "{0}  v{1}   {2}".format(label, mver, self._t("market_not_installed"))
+        if status == "update":
+            return "{0}  v{1}   {2}".format(label, mver, self._t("market_update_ready", v=ver))
+        return "{0}  v{1}   {2}".format(label, mver, self._t("market_up_to_date", v=ver))
+
+    def _rebuild_market_ui(self):
+        self.buttons = []
+        y = 140
+        for i, info in enumerate(self.market_mods[:6]):
+            status, ver = market.local_status(info)
+            btn_label = self._t("market_update" if status == "update" else "market_install")
+            if status == "installed":
+                btn_label = self._t("market_up_to_date", v=ver)
+                btn = None
+            elif self.market_state == "installing":
+                btn = None
+            else:
+                btn = Button((1040, y + 20, 150, 36), btn_label,
+                             lambda inf=info: self._install_market_mod(inf))
+            if btn:
+                self.buttons.append(btn)
+            y += 80
+        self.buttons.append(Button((60, 700, 150, 44), self._t("btn_back"),
+                                   self._back_to_menu))
+        self.buttons.append(Button((230, 700, 150, 44), self._t("market_check"),
+                                   self._refresh_market))
+
+    def _draw_market(self):
+        title = get_font(36).render(self._t("market_title"), True, COLOR_ACCENT)
+        self.screen.blit(title, title.get_rect(center=(W // 2, 60)))
+        hint = get_font(15).render(self._t("market_hint"), True, COLOR_DIM)
+        self.screen.blit(hint, hint.get_rect(center=(W // 2, 94)))
+        rh = get_font(15).render(self._t("market_restart_hint"), True, COLOR_GOLD)
+        self.screen.blit(rh, rh.get_rect(center=(W // 2, 116)))
+        if self.market_state in ("loading",):
+            t = get_font(20).render(self._t("market_installing"), True, COLOR_DIM)
+            self.screen.blit(t, (60, 150))
+        elif self.market_error:
+            t = get_font(18).render(self._t("market_load_failed", e=self.market_error),
+                                    True, COLOR_RED)
+            self.screen.blit(t, (60, 150))
+        elif not self.market_mods:
+            t = get_font(20).render(self._t("market_no_mods"), True, COLOR_TEXT)
+            self.screen.blit(t, (60, 150))
+        y = 140
+        for i, info in enumerate(self.market_mods[:6]):
+            status, ver = market.local_status(info)
+            pygame.draw.rect(self.screen, COLOR_PANEL, (60, y, 1160, 72), border_radius=8)
+            label = self._market_label(info, status, ver)
+            t = get_font(20).render(label, True, COLOR_TEXT)
+            self.screen.blit(t, (80, y + 8))
+            desc = (info.get("description") or {})
+            dtext = desc.get(self.lang) or desc.get("en") or ""
+            if dtext:
+                d = get_font(15).render(dtext[:110], True, COLOR_DIM)
+                self.screen.blit(d, (80, y + 38))
+            if self.market_state == "installing" and                     str(info.get("id") or "") == self.market_installing_id:
+                t = get_font(16).render(self._t("market_installing"), True, COLOR_GOLD)
+                self.screen.blit(t, (1040, y + 26))
+            y += 80
+        if self.market_toast:
+            t = get_font(15).render(self.market_toast, True, COLOR_GREEN)
+            self.screen.blit(t, (60, 674))
+        for b in self.buttons:
+            b.draw(self.screen)
+
     # ---------- Update ----------
 
     def _open_update(self):
@@ -975,6 +1104,8 @@ class App:
             self._draw_menu()
         elif self.screen_name == "mods":
             self._draw_mods()
+        elif self.screen_name == "market":
+            self._draw_market()
         elif self.screen_name == "update":
             self._draw_update()
         elif self.screen_name == "lobby":

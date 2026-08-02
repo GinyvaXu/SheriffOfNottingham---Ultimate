@@ -10,6 +10,7 @@ v1.2.0 adds a **game icon**, decorative in-game graphics, an **in-game mods mana
 v1.2.1 adds **automatic update checking** (startup check + menu button) and one-click silent reinstall from GitHub releases.
 v1.2.2 fixes **mod enable/disable save failures** (UTF-8 BOM manifests and read-only files) and makes the **update check** resilient (jsDelivr + GitHub API fallback sources, retries, friendly timeout/network messages).
 v1.2.3 fixes **"mod.json not writable" after installing under Program Files**: the installer grants write permission on the mods folder, the game self-repairs folder ACLs (icacls) on demand, and automatically falls back to a per-user mods folder under %APPDATA% (with migration) when the install folder is still not writable. The Mods screen now shows the actual mods folder path.
+v1.3.0 adds an in-game **Mods Market** (browse the GitHub-hosted catalog, one-click download & install), ships **5 text-only reskin mods** (cyberpunk / medieval / starlight / steampunk / arcane), and makes server **chat messages follow the local reskin** ? reskins are client-side only, so each player online sees their own version.
 
 ## Files
 
@@ -19,15 +20,19 @@ bot.py       Bot AI module (easy / normal / hard, runs on the host server)
 net.py       TCP server + JSON protocol + disconnect/reconnect + bot driver
 gui.py       pygame button-only UI
 gfx.py       Procedural decorative graphics (badge, coin, card back, icon)
-mods.py      Mod loader (mods/ folder next to the exe, ModAPI for add/patch)
-lang.py      Bilingual strings (zh/en) + card-name rebuild for mods
+mods.py      Mod loader (mods/ folder next to the exe, ModAPI for add/patch/rename)
+lang.py      Bilingual strings (zh/en) + card-name rebuild + reskin renames
+market.py    Mod market: remote catalog + one-click download & install
+mods_market.json  Mod market catalog (raw + jsDelivr CDN)
+mods_pack/   Packed mod zips served to the in-game market
 main.py      Entry point (--version shows the version dialog)
-version.py   __version__ = "1.2.3"
+version.py   __version__ = "1.3.0"
 installer.iss  Inno Setup script that builds the installer
 test_bot.py  Headless bot automation test (full game + reconnect)
 test_ai_bots.py  Test for in-lobby AI bots (host adds bots, plays a full game)
 test_new_rules.py  Unit tests for royal goods & black market modules
 test_mods.py Mod loader unit tests (register/patch/enable/disable/errors)
+test_reskin_mods.py  Reskin mod + market install tests
 mods/        Built-in mod folder (README.md + example_mod + cyberpunk_mod, disabled by default)
 ```
 

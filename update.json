@@ -1,5 +1,5 @@
 {
-  "version": "1.2.3",
-  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.2.3/SheriffOfNottingham-Setup-1.2.3.exe",
-  "notes": "v1.2.3: Mods folder now writable for normal users even when installed under Program Files (installer ACL + per-user fallback)."
+  "version": "1.3.0",
+  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.3.0/SheriffOfNottingham-Setup-1.3.0.exe",
+  "notes": "v1.3.0: In-game Mods Market (one-click download & install), 5 text-only reskin mods (cyberpunk/medieval/starlight/steampunk/arcane), chat messages now follow the local reskin."
 }

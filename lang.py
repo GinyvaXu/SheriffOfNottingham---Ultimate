@@ -117,6 +117,21 @@ UI = {
         "btn_close": "Close",
         "btn_back_room": "Back to Room",
         "btn_mods": "Mods",
+        "btn_market": "Mods Market",
+        "market_title": "Mods Market",
+        "market_hint": "One-click download & install of community reskin mods. Installed mods are enabled from the Mods screen.",
+        "market_check": "Refresh",
+        "market_installing": "Downloading and installing...",
+        "market_installed": "Installed. Enable it from the Mods screen, then restart the game.",
+        "market_update_ready": "Update available: v{v}",
+        "market_up_to_date": "Installed v{v}",
+        "market_not_installed": "Not installed",
+        "market_install": "Install",
+        "market_update": "Update",
+        "market_failed": "Install failed: {e}",
+        "market_load_failed": "Market load failed: {e}",
+        "market_no_mods": "No mods on the market yet.",
+        "market_restart_hint": "Client-side only: each player sees their own reskin.",
         "mods_title": "Mods",
         "mods_hint": "Enable/disable installed mods. Changes are saved to mod.json and applied on the next start. If the install folder is not writable, mods are stored per-user automatically.",
         "mods_enable": "Enable",
@@ -276,6 +291,21 @@ UI = {
         "btn_close": "\u5173\u95ed",
         "btn_back_room": "\u8fd4\u56de\u623f\u95f4",
         "btn_mods": "\u6a21\u7ec4",
+        "btn_market": "\u6a21\u7ec4\u5e02\u573a",
+        "market_title": "\u6a21\u7ec4\u5e02\u573a",
+        "market_hint": "\u4e00\u952e\u4e0b\u8f7d\u5b89\u88c5\u793e\u533a\u8d34\u76ae\u6a21\u7ec4\u3002\u5b89\u88c5\u540e\u5728\u201c\u6a21\u7ec4\u201d\u754c\u9762\u542f\u7528\u3002",
+        "market_check": "\u5237\u65b0",
+        "market_installing": "\u6b63\u5728\u4e0b\u8f7d\u5e76\u5b89\u88c5...",
+        "market_installed": "\u5df2\u5b89\u88c5\u3002\u8bf7\u5728\u6a21\u7ec4\u754c\u9762\u542f\u7528\u540e\u91cd\u542f\u6e38\u620f\u3002",
+        "market_update_ready": "\u6709\u65b0\u7248\u672c\uff1av{v}",
+        "market_up_to_date": "\u5df2\u5b89\u88c5 v{v}",
+        "market_not_installed": "\u672a\u5b89\u88c5",
+        "market_install": "\u5b89\u88c5",
+        "market_update": "\u66f4\u65b0",
+        "market_failed": "\u5b89\u88c5\u5931\u8d25\uff1a{e}",
+        "market_load_failed": "\u5e02\u573a\u52a0\u8f7d\u5931\u8d25\uff1a{e}",
+        "market_no_mods": "\u5e02\u573a\u4e0a\u8fd8\u6ca1\u6709\u6a21\u7ec4\u3002",
+        "market_restart_hint": "\u4ec5\u5ba2\u6237\u7aef\u751f\u6548\uff1a\u6bcf\u4f4d\u73a9\u5bb6\u53ea\u80fd\u770b\u5230\u81ea\u5df1\u7684\u8d34\u76ae\u7248\u672c\u3002",
         "mods_title": "\u6a21\u7ec4\u7ba1\u7406",
         "mods_hint": "\u542f\u7528/\u7981\u7528\u5df2\u5b89\u88c5\u7684\u6a21\u7ec4\u3002\u4fee\u6539\u4f1a\u4fdd\u5b58\u5230 mod.json\uff0c\u4e0b\u6b21\u542f\u52a8\u751f\u6548\u3002\u5982\u679c\u5b89\u88c5\u76ee\u5f55\u4e0d\u53ef\u5199\uff0c\u6a21\u7ec4\u4f1a\u81ea\u52a8\u5b58\u653e\u5230\u7528\u6237\u76ee\u5f55\u3002",
         "mods_enable": "\u542f\u7528",
@@ -440,6 +470,27 @@ _PATTERNS = {
 
 _EN_NAMES = []
 
+# Text-reskin hook: old English goods name -> (new English name, new Chinese name).
+# Set by api.rename() in text-only reskin mods. lang.translate() applies the
+# mapping to server messages so every client sees its own reskin even though the
+# server only knows the canonical names. Only the client side is affected.
+RENAME_MAP = {}
+
+
+def _apply_renames(text, lang):
+    """Replace canonical English goods names with the active mod's names."""
+    if not RENAME_MAP or not text:
+        return text
+    for old in sorted(RENAME_MAP, key=len, reverse=True):
+        new_en, new_zh = RENAME_MAP[old]
+        new = new_zh if lang == "zh" else new_en
+        if not new or new == old:
+            continue
+        pat = re.compile(r"(?<![A-Za-z])" + re.escape(old) + r"(?![A-Za-z])|"
+                         + re.escape(old) + r"(?=x\d)")
+        text = pat.sub(lambda m: new, text)
+    return text
+
 
 def rebuild_names():
     """Rebuild the English->Chinese name matcher (call after mods register)."""
@@ -458,20 +509,21 @@ rebuild_names()
 
 def translate(msg, lang):
     """Translate a canonical English server message; unknown messages pass through."""
-    if lang != "zh" or not msg:
+    if not msg:
         return msg
     out = msg
-    if out in _EXACT["zh"]:
-        out = _EXACT["zh"][out]
-    else:
-        for pat, tmpl in _PATTERNS["zh"]:
-            m = pat.match(out)
-            if m:
-                out = tmpl.format(*m.groups())
-                break
-    for t, zh in TYPE_ZH.items():
-        if t in out:
-            out = out.replace(t, zh)
-    for pat, zh in _EN_NAMES:
-        out = pat.sub(zh, out)
-    return out
+    if lang == "zh":
+        if out in _EXACT["zh"]:
+            out = _EXACT["zh"][out]
+        else:
+            for pat, tmpl in _PATTERNS["zh"]:
+                m = pat.match(out)
+                if m:
+                    out = tmpl.format(*m.groups())
+                    break
+        for t, zh in TYPE_ZH.items():
+            if t in out:
+                out = out.replace(t, zh)
+        for pat, zh in _EN_NAMES:
+            out = pat.sub(zh, out)
+    return _apply_renames(out, lang)

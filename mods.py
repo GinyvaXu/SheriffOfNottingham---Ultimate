@@ -42,6 +42,10 @@ import lang
 
 MODS_DIR = "mods"
 
+# Snapshot of the canonical card names taken before any mod registers,
+# used by text-only reskin mods (api.rename) to map server messages.
+_BASE_EN = {}
+
 _MODULES = {"game": game, "gui": gui, "lang": lang}
 
 
@@ -118,6 +122,23 @@ class ModAPI:
         if color:
             gui.TYPE_COLOR[key] = tuple(color)
         self._rebuild_all_types()
+
+    def rename(self, key, name_en, name_zh):
+        """Text-only reskin: rename an existing card type (type key unchanged).
+
+        Patches the card names used by the local UI and registers the canonical
+        English name -> new names mapping so server chat/banner messages get
+        renamed on this client too (the server itself is untouched, so every
+        player sees only their own reskin).
+        """
+        key = str(key).upper()
+        old_en = _BASE_EN.get(key, game.TYPE_EN.get(key, key))
+        if old_en != name_en:
+            lang.RENAME_MAP[old_en] = (name_en, name_zh)
+        game.TYPE_EN[key] = name_en
+        game.TYPE_ZH[key] = name_zh
+        lang.TYPE_ZH[key] = name_zh
+        return (old_en, name_en, name_zh)
 
     def patch(self, module_name, attr, value):
         """Modify the game itself, e.g. api.patch("game", "HAND_SIZE", 7)."""
@@ -383,6 +404,9 @@ def load_mods(base=None):
     ``loaded`` is a list of info dicts; ``errors`` is a list of
     "mod id: message" strings. A failing mod never crashes the game.
     """
+    global _BASE_EN
+    _BASE_EN = dict(game.TYPE_EN)
+    lang.RENAME_MAP.clear()
     loaded, errors = [], []
     for info in discover_mods(base):
         mid = info["id"]

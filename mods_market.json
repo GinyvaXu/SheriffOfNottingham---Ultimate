@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "mods": [
+    {
+      "id": "cyberpunk",
+      "folder": "cyberpunk_mod",
+      "version": "1.1.0",
+      "name": {
+        "en": "Cyberpunk Overlay",
+        "zh": "赛博朋克换皮"
+      },
+      "description": {
+        "en": "Neon reskin: all goods names, phases and key UI terms get a cyberpunk flavor. Client-side only.",
+        "zh": "霓虹赛博风格：所有货物名、阶段名与关键界面词改成赛博朋克风味。仅客户端生效。"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/cyberpunk_mod.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/cyberpunk_mod.zip"
+    },
+    {
+      "id": "medieval",
+      "folder": "medieval_mod",
+      "version": "1.0.0",
+      "name": {
+        "en": "Medieval England",
+        "zh": "中世纪英格兰"
+      },
+      "description": {
+        "en": "Medieval reskin: orchard apples, monastery cheese, war crossbows and mead. Client-side only.",
+        "zh": "中世纪换皮：果园苹果、修道院奶酪、战弩与蜂蜜酒。仅客户端生效。"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/medieval_mod.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/medieval_mod.zip"
+    },
+    {
+      "id": "starlight",
+      "folder": "starlight_mod",
+      "version": "1.0.0",
+      "name": {
+        "en": "Starlight Colony",
+        "zh": "星光殖民地"
+      },
+      "description": {
+        "en": "Space-faring reskin: hydroponic apples, vat chicken, plasma bows and nebula wine. Client-side only.",
+        "zh": "星际殖民换皮：水培苹果、培养鸡肉、等离子弩与星云酒。仅客户端生效。"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/starlight_mod.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/starlight_mod.zip"
+    },
+    {
+      "id": "steampunk",
+      "folder": "steampunk_mod",
+      "version": "1.0.0",
+      "name": {
+        "en": "Steamforge City",
+        "zh": "蒸汽锻炉城"
+      },
+      "description": {
+        "en": "Steampunk reskin: brass apples, clockwork chickens, steam crossbows and coal gin. Client-side only.",
+        "zh": "蒸汽朋克换皮：黄铜苹果、发条鸡、蒸汽弩与煤烟酒。仅客户端生效。"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/steampunk_mod.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/steampunk_mod.zip"
+    },
+    {
+      "id": "arcane",
+      "folder": "arcane_mod",
+      "version": "1.0.0",
+      "name": {
+        "en": "Arcane Realms",
+        "zh": "奥术秘境"
+      },
+      "description": {
+        "en": "Fantasy reskin: fey apples, familiar chickens, arcane crossbows and elven wine. Client-side only.",
+        "zh": "魔法世界观换皮：仙灵苹果、使魔鸡、奥术弩与精灵酒。仅客户端生效。"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/arcane_mod.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/arcane_mod.zip"
+    }
+  ]
+}
