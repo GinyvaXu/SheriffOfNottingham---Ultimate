@@ -1,0 +1,7 @@
+﻿{
+  "id": "example_mod",
+  "name": "Example Mod",
+  "version": "0.1.0",
+  "description": "Sample mod: adds Tea contraband and a Pear legal good. Disabled by default - copy this folder and set enabled=true to try it.",
+  "enabled": false
+}

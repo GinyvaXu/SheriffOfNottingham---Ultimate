@@ -547,17 +547,19 @@ class Game:
                 continue
             aw = []
             top = [r for r in ranked if self._eff_legal(r, t) == top_eff]
+            king = KING_BONUS.get(t, 0)
+            queen = QUEEN_BONUS.get(t, 0)
             if len(top) > 1:
-                share = (KING_BONUS[t] + QUEEN_BONUS[t]) // len(top)
+                share = (king + queen) // len(top) if (king + queen) else 0
                 for r in top:
                     aw.append({"seat": r["seat"], "bonus": share})
             else:
-                aw.append({"seat": ranked[0]["seat"], "bonus": KING_BONUS[t]})
+                aw.append({"seat": ranked[0]["seat"], "bonus": king})
                 if len(ranked) > 1:
                     second_eff = self._eff_legal(ranked[1], t)
-                    if second_eff > 0:
+                    if second_eff > 0 and queen:
                         second = [r for r in ranked[1:] if self._eff_legal(r, t) == second_eff]
-                        share = QUEEN_BONUS[t] // len(second)
+                        share = queen // len(second)
                         for r in second:
                             aw.append({"seat": r["seat"], "bonus": share})
             entries.append({"type": t, "awards": aw})

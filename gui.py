@@ -201,7 +201,8 @@ class TextInput:
 
 class App:
     def __init__(self, host=False, players=4, port=net.DEFAULT_PORT, name="", join="",
-                 lang_name="zh", royal=True, black_market=True):
+                 lang_name="zh", royal=True, black_market=True,
+                 mod_names=None, mod_errors=None):
         pygame.init()
         pygame.display.set_caption(lang.UI.get(lang_name, lang.UI["zh"])["title"])
         self.screen = pygame.display.set_mode((W, H))
@@ -236,6 +237,12 @@ class App:
         self.done = False
         self.server_info = []   # list of (ui_key, kwargs) rendered per language
         self.menu_note = ""
+        self.mod_names = list(mod_names or [])
+        self.mod_errors = list(mod_errors or [])
+        for err in self.mod_errors:
+            self._append_chat(self._t("mods_error", s=err), COLOR_RED)
+        if self.mod_names:
+            self._append_chat(self._t("mods_line", s=", ".join(self.mod_names)), COLOR_GOLD)
 
         self.name_input = TextInput((300, 180, 300, 36), self._t("ph_name"))
         self.players_input = TextInput((300, 240, 300, 36), self._t("ph_players"))
@@ -615,10 +622,12 @@ class App:
             self.buttons.append(Button((40, 610, 240, 42), self._t("btn_seal", n=n),
                                        lambda: self._load_bag(), enabled=1 <= n <= 5))
         elif kind == "declare":
+            n_leg = len(game.LEGAL)
+            step = min(150, (W - 80) // max(n_leg + 1, 1))
             for i, t in enumerate(game.LEGAL):
-                self.buttons.append(Button((40 + i * 150, 610, 140, 42), self._tn(t),
+                self.buttons.append(Button((40 + i * step, 610, step - 10, 42), self._tn(t),
                                            lambda t=t: self._pick_decl(t), highlight=self.decl_type == t))
-            self.buttons.append(Button((40 + 4 * 150, 610, 220, 42),
+            self.buttons.append(Button((40 + n_leg * step, 610, 220, 42),
                                        self._t("btn_confirm_decl", n=prompt.get("bag_count", 0)),
                                        lambda: self._do_declare(), enabled=self.decl_type is not None))
         elif kind == "bribe":
@@ -716,6 +725,14 @@ class App:
         self.screen.blit(title, title.get_rect(center=(W // 2, 100)))
         sub = get_font(20).render(self._t("subtitle"), True, COLOR_DIM)
         self.screen.blit(sub, sub.get_rect(center=(W // 2, 142)))
+        if self.mod_names:
+            t = get_font(16).render(self._t("mods_line", s=", ".join(self.mod_names)),
+                                    True, COLOR_GOLD)
+            self.screen.blit(t, t.get_rect(center=(W // 2, 176)))
+        if self.mod_errors:
+            t = get_font(15).render(self._t("mods_error", s="; ".join(self.mod_errors)),
+                                    True, COLOR_RED)
+            self.screen.blit(t, t.get_rect(center=(W // 2, 200)))
         for lbl, inp in [(self._t("lbl_name"), self.name_input),
                          (self._t("lbl_players"), self.players_input),
                          (self._t("lbl_join"), self.join_input)]:

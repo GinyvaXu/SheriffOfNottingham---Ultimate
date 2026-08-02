@@ -3,6 +3,7 @@
 A minimal Python implementation of the classic board game **Sheriff of Nottingham**.
 Feature-complete, simple code, modular design. Classic rules plus two optional
 house modules (Royal Goods cards and Black Market quests), both toggleable.
+v1.1.0 adds a **mod system** and an **installable/uninstallable setup package**.
 
 ## Files
 
@@ -11,12 +12,18 @@ game.py      Rules & state machine (pure logic, no UI/network)
 bot.py       Bot AI module (easy / normal / hard, runs on the host server)
 net.py       TCP server + JSON protocol + disconnect/reconnect + bot driver
 gui.py       pygame button-only UI
-main.py      Entry point
+mods.py      Mod loader (mods/ folder next to the exe, ModAPI for add/patch)
+lang.py      Bilingual strings (zh/en) + card-name rebuild for mods
+main.py      Entry point (--version shows the version dialog)
+version.py   __version__ = "1.1.0"
+installer.iss  Inno Setup script that builds the installer
 test_bot.py  Headless bot automation test (full game + reconnect)
 test_ai_bots.py  Test for in-lobby AI bots (host adds bots, plays a full game)
 test_new_rules.py  Unit tests for royal goods & black market modules
-00_企画书...    Project proposal (Chinese)
-01_计划书...    Implementation plan (Chinese)
+test_mods.py Mod loader unit tests (register/patch/enable/disable/errors)
+mods/        Built-in mod folder (README.md + example_mod, disabled by default)
+00_???_?????????.md    Project proposal (Chinese)
+01_???_Python???.md         Implementation plan (Chinese)
 ```
 
 ## Dependencies & install
@@ -39,21 +46,8 @@ test_new_rules.py  Unit tests for royal goods & black market modules
 python main.py --host --players 4 --port 5555 --name ZhangSan
 ```
 `--players` is the seat cap, 2-5. The host clicks "Start Game" in the lobby; the game
-adjusts to however many players actually joined.
-
-## AI bots
-
-- In the lobby the host can add bots (Easy / Normal / Hard) with the buttons on
-  the right to fill empty seats, and remove them again before starting.
-- Bots act autonomously on the host server (market discard/draw, bag loading,
-  declarations, bribes, sheriff inspections, black-market submissions) and do
-  not need a network connection. Their decisions only use public information.
-- A game can be played solo: 1 human + 1-4 bots.
-
-## Rules notes
-
-- Market: players discard up to 5 cards, then draw the same number from the
-  deck. The discard piles are hidden and can no longer be drawn from.
+adjusts to however many players actually joined. In the lobby the host can set the
+number of rounds (default: each player is sheriff twice) and rename themselves.
 
 **Player (join):**
 ```
@@ -68,26 +62,77 @@ menu has a "Paste" button to drop a received `IP:port` straight into the join bo
 - Tunneling tool (frp / ngrok / etc.): map the public port to local 5555.
 - Then share `PublicIP:Port` with friends to join.
 
-## Optional modules (default ON, both toggleable)
+## AI bots
 
-**Royal Goods cards** (`--no-royal` to disable):
-- 12 high-value contraband cards: Royal Apple/Cheese/Bread/Chicken, 3 of each.
-- Value 12 gold each. They behave as contraband: cannot be declared, and are
-  confiscated with the usual fine if the sheriff inspects and catches them.
-- End scoring: each Royal card counts as **2 legal cards of its type**, so it can
-  push you to the 1st/2nd place bonus for that legal goods.
+- In the lobby the host can add bots (Easy / Normal / Hard) with the buttons on
+  the right to fill empty seats, and remove them again before starting.
+- Bots act autonomously on the host server (market discard/draw, bag loading,
+  declarations, bribes, sheriff inspections, black-market submissions) and do
+  not need a network connection. Their decisions only use public information.
+- A game can be played solo: 1 human + 1-4 bots.
 
-**Black Market quests** (`--no-blackmarket` to disable):
-- At setup, 3 quest groups are revealed, each pinned to one contraband type
-  (silk / pepper / crossbow / honey / medicine / relic).
-- The first player to smuggle **3 cards of that type** into town completes the
-  quest: the 3 cards are discarded, the completion is announced to everyone, and
-  the player gets +35 gold plus a Black Market card (reward slots per type: 1st +35,
-  2nd +28). Each Black Market card held is worth **+25 points** at game end.
+## Mod system (v1.1.0)
+
+Any folder under `mods/` (next to the exe, or the project root when running from
+source) with a `mod.json` is a mod:
+
+```json
+{
+  "id": "example_mod",
+  "name": "Example Mod",
+  "version": "0.1.0",
+  "description": "Adds Tea (contraband) and Pear (legal goods).",
+  "enabled": false
+}
+```
+
+- `enabled: true` loads the mod; the folder may also contain `mod.py` whose
+  `register(api)` function is called at startup.
+- The `ModAPI` lets you add card types or change the game itself:
+
+```python
+def register(api):
+    api.add_contraband("TEA", "Tea", "??", value=5, fine=3, cnt3=8, cnt6=12, color=(90, 160, 120))
+    api.add_legal("PEAR", "Pear", "?", value=3, fine=2, cnt3=24, cnt6=24,
+                  king_bonus=10, queen_bonus=5, color=(140, 200, 90))
+    api.patch("game", "HAND_SIZE", 7)     # e.g. change the hand size rule
+```
+
+- `add_legal` / `add_contraband` / `add_royal` register new card types with the
+  per-player card counts (`cnt3` for 3 players, `cnt6` for 4-6 players), colors,
+  values, fines and (for legal goods) the 1st/2nd-place end bonuses.
+- `patch("game", attr, value)` / `get("game", attr)` read or modify any engine
+  attribute (rules). Broken mods are skipped with an error shown on the menu
+  screen; they never crash the game.
+- See `mods/README.md` (bilingual) and `mods/example_mod/` for the full API.
+- All players in a room should install the same content mods: the server drives
+  the rules, clients only need the names/colors to render cards.
+
+## Installer (v1.1.0)
+
+`installer\SheriffOfNottingham-Setup-1.1.0.exe` is a normal Windows setup built
+with Inno Setup:
+
+- Installs the game + `mods\` folder + a desktop/start-menu shortcut.
+- Uninstalls cleanly from "Apps & features" (Control Panel) and removes the
+  whole app folder including any mods you added.
+- Supports English and Chinese installer languages (chosen at install time).
+- Rebuild it with: `ISCC.exe installer.iss` after running `??.bat`.
+
+## Rules notes
+
+- Market: players discard up to 5 cards, then draw the same number from the
+  deck. The discard piles are hidden and can no longer be drawn from.
+- Each card type has a fixed value/fine; card counts scale with player count.
+- 4 legal goods (apple / chicken / cheese-milk / bread) and 4 contraband
+  (silk / crossbow / coffee / wine) in the classic rules, plus royal goods.
+- If you smuggle 3 cards of the same black-market contraband, the quest
+  auto-submits: the 3 cards are discarded, the reward (1st 30-35 gold, 2nd
+  25-30) is announced, and completed quests lock for everyone else.
 
 ## Gameplay
 
-- **Market**: choose hand cards to discard (0-5), then draw from a discard-pile top or the deck to refill to 6.
+- **Market**: choose hand cards to discard (0-5), then draw the same number back from the deck.
 - **Load**: secretly pick 1-5 cards into your bag, then seal it.
 - **Declare**: pick a legal goods type and confirm (card count is forced = bag size; the type may be a lie).
 - **Inspect**: the bag owner may bribe (gold + note); the sheriff decides pass or inspect.
@@ -103,8 +148,10 @@ auto-reconnects.
 
 ```
 python test_new_rules.py              # royal goods + black market unit tests
+python test_mods.py                   # mod loader tests
 python test_bot.py --players 3        # full 3-player game (incl. disconnect/reconnect)
 python test_bot.py --players 5        # 5-player game
+python test_ai_bots.py --rounds 2     # in-lobby AI bots
 ```
 
 ## Known limitations
@@ -113,16 +160,19 @@ python test_bot.py --players 5        # 5-player game
 - Bilingual UI (Chinese default; font loader keeps CJK system fonts as fallback).
 - Plaintext TCP, no encryption or anti-cheat.
 - Direct public connection depends on NAT type; use frp/ngrok as relay if it fails.
-- Bribes simplified to gold + note; no goods/promise validation (consistent with 01_计划书).
+- Bribes simplified to gold + note; no goods/promise validation.
 
 ## Package to exe
 
 ```
-打包.bat                      # or run the command below manually
-python -m PyInstaller --onefile --windowed --name "SheriffOfNottingham" --add-data "assets;assets" main.py
+??.bat                        # or run the command below manually
+python -m PyInstaller --clean --noconfirm SheriffOfNottingham.spec
 ```
 
-- Produces `dist\SheriffOfNottingham.exe` (~28 MB, single file, no Python install needed).
+- Produces `dist\SheriffOfNottingham.exe` (~41 MB, single file, no Python install
+  needed) with version info 1.1.0 and a bundled `mods\` copy; the running exe
+  reads `mods\` **next to itself**, so you can add/remove mods freely.
 - The first run as host triggers a Windows Firewall prompt; allow it to open the port.
 - To see error output, package with `--console` or run `python main.py` directly.
-- The exe accepts the same CLI args: `SheriffOfNottingham.exe --host --players 4` or `SheriffOfNottingham.exe --join 192.168.1.5:5555`.
+- The exe accepts the same CLI args: `SheriffOfNottingham.exe --host --players 4`
+  or `SheriffOfNottingham.exe --join 192.168.1.5:5555`.

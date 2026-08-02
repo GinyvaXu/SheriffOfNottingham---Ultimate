@@ -1,11 +1,11 @@
-﻿# build artifacts
+# build artifacts
 build/
 dist/
-*.spec
+installer/
+*.pyc
 
 # python cache
 __pycache__/
-*.pyc
 
 # local verification screenshots
 cap_*.png

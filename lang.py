@@ -140,6 +140,8 @@ UI = {
         "lvl_easy": "Easy",
         "lvl_normal": "Normal",
         "lvl_hard": "Hard",
+        "mods_line": "Mods: {s}",
+        "mods_error": "Mod error: {s}",
     },
     "zh": {
         "title": "\u8bfa\u4e01\u6c49\u8b66\u957f - \u6781\u7b80\u8054\u673a\u7248",
@@ -260,6 +262,8 @@ UI = {
         "lvl_easy": "\u7b80\u5355",
         "lvl_normal": "\u666e\u901a",
         "lvl_hard": "\u56f0\u96be",
+        "mods_line": "\u6a21\u7ec4\uff1a{s}",
+        "mods_error": "\u6a21\u7ec4\u9519\u8bef\uff1a{s}",
     },
 }
 
@@ -361,12 +365,21 @@ _PATTERNS = {
 }
 
 _EN_NAMES = []
-for t, en in sorted(game.TYPE_EN.items(), key=lambda kv: -len(kv[1])):
-    zh = TYPE_ZH.get(t)
-    if zh:
-        # standalone name, or glued like "Applex1" inside LIE messages
-        _EN_NAMES.append((re.compile(r"(?<![A-Za-z])" + re.escape(en) + r"(?![A-Za-z])|"
-                                     + re.escape(en) + r"(?=x\d)"), zh))
+
+
+def rebuild_names():
+    """Rebuild the English->Chinese name matcher (call after mods register)."""
+    global _EN_NAMES
+    _EN_NAMES = []
+    for t, en in sorted(game.TYPE_EN.items(), key=lambda kv: -len(kv[1])):
+        zh = TYPE_ZH.get(t)
+        if zh:
+            # standalone name, or glued like "Applex1" inside LIE messages
+            _EN_NAMES.append((re.compile(r"(?<![A-Za-z])" + re.escape(en) + r"(?![A-Za-z])|"
+                                         + re.escape(en) + r"(?=x\d)"), zh))
+
+
+rebuild_names()
 
 
 def translate(msg, lang):

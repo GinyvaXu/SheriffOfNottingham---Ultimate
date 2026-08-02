@@ -1,0 +1,202 @@
+﻿# -*- coding: utf-8 -*-
+"""Mod loader.
+
+Each mod is a subfolder of the ``mods/`` directory (next to the executable in
+frozen builds, next to this file when running from source). A mod consists of:
+
+    mod.json   -- manifest:
+        {
+          "id": "my_mod",            # unique id (folder name is used if missing)
+          "name": "My Mod",
+          "version": "0.1.0",
+          "description": "...",
+          "enabled": true            # set false to disable without deleting
+        }
+    mod.py     -- optional Python code. If it defines ``register(api)`` it is
+                  called at startup with a ModAPI object.
+    assets/    -- optional extra files (currently unused by the engine, but
+                  mod code can read them via the folder path).
+
+The ModAPI lets a mod add card types (legal / contraband / royal), set colors,
+or patch engine attributes, e.g.::
+
+    def register(api):
+        api.add_contraband("TEA", "Tea", "\u8336\u53f6", value=5, fine=3,
+                           cnt3=8, cnt6=12, color=(90, 160, 120))
+        api.patch("game", "HAND_SIZE", 7)          # modify the game itself
+
+All players in a room should install the same content mods (the server drives
+the rules; clients need the names/colors to render cards).
+"""
+
+import importlib.util
+import io
+import json
+import os
+import sys
+
+import game
+import gui
+import lang
+
+MODS_DIR = "mods"
+
+_MODULES = {"game": game, "gui": gui, "lang": lang}
+
+
+class ModAPI:
+    """Functions exposed to a mod's register(api)."""
+
+    def __init__(self, mod_id, folder):
+        self.mod_id = mod_id
+        self.folder = folder
+
+    # ---------- helpers ----------
+
+    def _sync_names(self, key, name_en, name_zh):
+        game.TYPE_EN[key] = name_en
+        game.TYPE_ZH[key] = name_zh
+        lang.TYPE_ZH[key] = name_zh
+
+    def _rebuild_all_types(self):
+        game.ALL_TYPES[:] = game.LEGAL + game.CONTRABAND + game.ROYAL_TYPES
+
+    # ---------- content ----------
+
+    def add_legal(self, key, name_en, name_zh, value, fine=None, cnt3=0, cnt6=0,
+                  color=None, king_bonus=0, queen_bonus=0):
+        """Add a new legal goods type (declarable, no confiscation)."""
+        key = str(key).upper()
+        if key in game.GOODS or key in game.ROYAL_GOODS:
+            raise ValueError(f"[{self.mod_id}] goods key {key} already exists")
+        game.GOODS[key] = {"value": int(value),
+                           "fine": int(value if fine is None else fine),
+                           "cnt3": int(cnt3), "cnt6": int(cnt6)}
+        if key not in game.LEGAL:
+            game.LEGAL.append(key)
+        game.KING_BONUS[key] = int(king_bonus)
+        game.QUEEN_BONUS[key] = int(queen_bonus)
+        self._sync_names(key, name_en, name_zh)
+        if color:
+            gui.TYPE_COLOR[key] = tuple(color)
+        self._rebuild_all_types()
+
+    def add_contraband(self, key, name_en, name_zh, value, fine=None, cnt3=0,
+                       cnt6=0, color=None):
+        """Add a new contraband type (cannot be declared, confiscated)."""
+        key = str(key).upper()
+        if key in game.GOODS or key in game.ROYAL_GOODS:
+            raise ValueError(f"[{self.mod_id}] goods key {key} already exists")
+        game.GOODS[key] = {"value": int(value),
+                           "fine": int(value if fine is None else fine),
+                           "cnt3": int(cnt3), "cnt6": int(cnt6)}
+        if key not in game.CONTRABAND:
+            game.CONTRABAND.append(key)
+        self._sync_names(key, name_en, name_zh)
+        if color:
+            gui.TYPE_COLOR[key] = tuple(color)
+        self._rebuild_all_types()
+
+    def add_royal(self, key, name_en, name_zh, of, equals, value, fine=None,
+                  cnt3=0, cnt6=0, color=None):
+        """Add a royal goods card (contraband that counts as `equals` legal)."""
+        key = str(key).upper()
+        of = str(of).upper()
+        if key in game.GOODS or key in game.ROYAL_GOODS:
+            raise ValueError(f"[{self.mod_id}] goods key {key} already exists")
+        if of not in game.LEGAL:
+            raise ValueError(f"[{self.mod_id}] royal 'of' type {of} is not legal")
+        game.ROYAL_GOODS[key] = {"of": of, "equals": int(equals),
+                                 "value": int(value),
+                                 "fine": int(value if fine is None else fine),
+                                 "cnt3": int(cnt3), "cnt6": int(cnt6)}
+        if key not in game.ROYAL_TYPES:
+            game.ROYAL_TYPES.append(key)
+        game.ROYAL_TYPE_OF[key] = of
+        self._sync_names(key, name_en, name_zh)
+        if color:
+            gui.TYPE_COLOR[key] = tuple(color)
+        self._rebuild_all_types()
+
+    def patch(self, module_name, attr, value):
+        """Modify the game itself, e.g. api.patch("game", "HAND_SIZE", 7)."""
+        mod = _MODULES.get(module_name)
+        if mod is None:
+            raise KeyError(f"[{self.mod_id}] unknown module {module_name}")
+        setattr(mod, attr, value)
+        return value
+
+    def get(self, module_name, attr):
+        """Read an engine attribute, e.g. api.get("game", "HAND_SIZE")."""
+        mod = _MODULES.get(module_name)
+        if mod is None:
+            raise KeyError(f"[{self.mod_id}] unknown module {module_name}")
+        return getattr(mod, attr)
+
+
+def mods_base():
+    """Directory that contains the mods/ folder (executable dir when frozen)."""
+    env = os.environ.get("SHERIFF_MODS_DIR")
+    if env:
+        return env
+    if getattr(sys, "frozen", False):
+        return os.path.join(os.path.dirname(sys.executable), MODS_DIR)
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), MODS_DIR)
+
+
+def discover_mods(base=None):
+    """Return sorted list of enabled mod folders (manifest + path)."""
+    base = base or mods_base()
+    out = []
+    if not os.path.isdir(base):
+        return out
+    for name in sorted(os.listdir(base)):
+        if name.startswith((".", "_")):
+            continue
+        folder = os.path.join(base, name)
+        if not os.path.isdir(folder):
+            continue
+        mpath = os.path.join(folder, "mod.json")
+        if not os.path.isfile(mpath):
+            continue
+        try:
+            with io.open(mpath, encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception:
+            continue
+        if not isinstance(manifest, dict) or manifest.get("enabled", True) is False:
+            continue
+        manifest.setdefault("id", name)
+        manifest.setdefault("name", name)
+        manifest.setdefault("version", "0.0.0")
+        out.append({"id": manifest["id"], "name": manifest["name"],
+                    "version": str(manifest["version"]),
+                    "description": str(manifest.get("description", "")),
+                    "folder": folder, "manifest": manifest})
+    return out
+
+
+def load_mods(base=None):
+    """Load all enabled mods. Returns (loaded, errors).
+
+    ``loaded`` is a list of info dicts; ``errors`` is a list of
+    "mod id: message" strings. A failing mod never crashes the game.
+    """
+    loaded, errors = [], []
+    for info in discover_mods(base):
+        mid = info["id"]
+        try:
+            py = os.path.join(info["folder"], "mod.py")
+            if os.path.isfile(py):
+                spec = importlib.util.spec_from_file_location(f"mod_{mid}", py)
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules[spec.name] = mod
+                spec.loader.exec_module(mod)
+                register = getattr(mod, "register", None)
+                if callable(register):
+                    register(ModAPI(mid, info["folder"]))
+            loaded.append(info)
+        except Exception as e:  # noqa: BLE001 - one bad mod must not kill the game
+            errors.append(f"{mid}: {e!r}")
+    lang.rebuild_names()
+    return loaded, errors
