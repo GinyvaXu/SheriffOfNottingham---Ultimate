@@ -2,7 +2,7 @@
   "id": "bribe_pot",
   "name": "Bribe Economics",
   "name_zh": "赏金经济",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Half of every accepted bribe goes into a public pot that is split equally at game end (remainder to the richest merchant). Changes the bribe meta without touching any card values.",
   "description_zh": "每笔被接受的赏金有一半进入公开赏金池，游戏结束时均分（余数给最富有的商人）。不改动任何卡牌数值。",
   "category": "rules",

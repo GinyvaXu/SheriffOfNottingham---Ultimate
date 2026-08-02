@@ -2,7 +2,7 @@
   "id": "royal_favor",
   "name": "Royal Favor",
   "name_zh": "皇家恩宠",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Every royal card smuggled past the sheriff grants favor; reaching milestones 2/4/6 pays +6/+10/+18 gold instantly. Royal cards become a real high-risk investment.",
   "description_zh": "每张成功过关的皇家卡获得恩宠，累计 2/4/6 张时分别立即 +6/+10/+18 金。让皇家货成为真正的高风险投资。",
   "category": "rules",

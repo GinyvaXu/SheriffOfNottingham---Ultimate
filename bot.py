@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Bot AI module: easy / normal / hard decision logic.
 
 Bots live on the host server and share the Game object, so they see the full
@@ -81,10 +81,11 @@ def _public_smuggle(p):
 
 # ---------- Market: discard choice ----------
 
-def choose_discard(g, seat, level):
+def choose_discard(g, seat, level, personality=None):
     """Return hand indices (0-5) to discard; the bot redraws the same count."""
     hand = g.players[seat].hand
     quest = set(g.quest_types)
+    params = bot_params(level, personality)
 
     def score(i):
         c = hand[i]
@@ -92,7 +93,8 @@ def choose_discard(g, seat, level):
         if c.get("royal"):
             s += 8
         if c["type"] in game.CONTRABAND:
-            s += 3
+            # greedy/reckless keep contraband in hand, honest/paranoid shed it
+            s += 2 + params["contra_ratio"]
         if level == "hard" and c["type"] in quest:
             s += 6
         return s
@@ -158,7 +160,7 @@ def choose_load(g, seat, level, personality=None):
 
 # ---------- Declare ----------
 
-def choose_declare(g, seat, level):
+def choose_declare(g, seat, level, personality=None):
     """Pick the legal type to declare (count is forced to the bag size)."""
     bag = g.players[seat].bag
     counts = {}

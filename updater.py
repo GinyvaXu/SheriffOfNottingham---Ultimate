@@ -111,7 +111,7 @@ def _from_release_api(data):
             break
     if not url:
         raise ValueError("no installer asset")
-    notes = str(data.get("body", "") or "")[:400]
+    notes = str(data.get("body", "") or "")[:400].replace("\r", "")
     return tag, url, notes
 
 
@@ -128,22 +128,24 @@ def check_for_update(timeout=_DEFAULT_TIMEOUT):
             if kind == "api":
                 data = _fetch(url, timeout)
                 latest, dl_url, notes = _from_release_api(json.loads(data.decode("utf-8")))
+                notes_zh = ""
             else:
                 man = fetch_manifest(url, timeout)
                 latest = str(man.get("version", "") or "").strip()
                 if not latest:
                     raise ValueError("empty manifest")
                 dl_url = str(man.get("url", "") or "")
-                notes = str(man.get("notes", "") or "")
+                notes = str(man.get("notes", "") or "").replace("\r", "")
+                notes_zh = str(man.get("notes_zh", "") or "").replace("\r", "")
             return {"available": is_newer(latest, current),
                     "version": latest, "current": current,
-                    "url": dl_url, "notes": notes, "error": None,
-                    "detail": ""}
+                    "url": dl_url, "notes": notes, "notes_zh": notes_zh,
+                    "error": None, "detail": ""}
         except Exception as e:  # noqa: BLE001 - never crash the UI thread
             last_err = e
             continue
     return {"available": False, "version": "", "current": current,
-            "url": "", "notes": "", "error": error_code(last_err),
+            "url": "", "notes": "", "notes_zh": "", "error": error_code(last_err),
             "detail": str(last_err) if last_err else ""}
 
 

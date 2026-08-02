@@ -496,31 +496,36 @@ class GameServer:
                 if g is None or g.phase in ("LOBBY", "GAME_OVER"):
                     return
                 acted = False
-                if g.phase == "MARKET":
-                    seat = g.market_current()
-                    if not self._is_bot(seat):
-                        return
-                    acted = self._bot_market(seat)
-                elif g.phase == "LOAD":
-                    pending = [i for i, p in enumerate(g.players)
-                               if i != g.sheriff and not p.bag_loaded and self._is_bot(i)]
-                    if not pending:
-                        return
-                    acted = self._bot_load_bags(pending)
-                elif g.phase == "DECLARE":
-                    seat = g.declare_current()
-                    if not self._is_bot(seat):
-                        return
-                    acted = self._bot_declare(seat)
-                elif g.phase == "INSPECT":
-                    target = g.inspect_current()
-                    if self._is_bot(target) and g.players[target].bribe is None:
-                        acted = self._bot_bribe(target)
-                    elif g.players[target].bribe is not None and self._is_bot(g.sheriff):
-                        acted = self._bot_inspect_decision()
-                    else:
-                        return
-                bm_acted = self._bot_black_market()
+                try:
+                    if g.phase == "MARKET":
+                        seat = g.market_current()
+                        if not self._is_bot(seat):
+                            return
+                        acted = self._bot_market(seat)
+                    elif g.phase == "LOAD":
+                        pending = [i for i, p in enumerate(g.players)
+                                   if i != g.sheriff and not p.bag_loaded and self._is_bot(i)]
+                        if not pending:
+                            return
+                        acted = self._bot_load_bags(pending)
+                    elif g.phase == "DECLARE":
+                        seat = g.declare_current()
+                        if not self._is_bot(seat):
+                            return
+                        acted = self._bot_declare(seat)
+                    elif g.phase == "INSPECT":
+                        target = g.inspect_current()
+                        if self._is_bot(target) and g.players[target].bribe is None:
+                            acted = self._bot_bribe(target)
+                        elif g.players[target].bribe is not None and self._is_bot(g.sheriff):
+                            acted = self._bot_inspect_decision()
+                        else:
+                            return
+                    bm_acted = self._bot_black_market()
+                except Exception:  # noqa: BLE001 - one bad bot decision must never freeze the server
+                    import traceback
+                    traceback.print_exc()
+                    return
             if not acted and not bm_acted:
                 return
             time.sleep(BOT_DELAY)

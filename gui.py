@@ -1486,7 +1486,7 @@ class App:
         if not updater.is_frozen():
             t = get_font(16).render(self._t("update_src_hint"), True, COLOR_DIM)
             self.screen.blit(t, (cx, 262))
-        notes = (info or {}).get("notes", "")
+        notes = self._update_notes(info or {})
         if notes and st in ("available", "downloaded", "installing"):
             ver = info.get("version", "")
             self._panel(self.screen, (cx, 300, 680, 340))
@@ -1570,10 +1570,10 @@ class App:
             self.screen.blit(t, (90, 486))
         # Avatar card content
         hint = get_font(14).render(self._t("avatar_hint"), True, COLOR_DIM)
-        self.screen.blit(hint, (520, 214))
-        preview = gfx.avatar_surface(self._avatar_payload(), 72)
-        pygame.draw.circle(self.screen, COLOR_GOLD, (670, 240), 46, 3)
-        self.screen.blit(preview, (634, 204))
+        self.screen.blit(hint, (520, 216))
+        preview = gfx.avatar_surface(self._avatar_payload(), 56)
+        pygame.draw.circle(self.screen, COLOR_GOLD, (700, 230), 34, 3)
+        self.screen.blit(preview, (672, 202))
         for b in self.avatar_buttons:
             b.draw(self.screen)
         self.avatar_path_input.draw(self.screen)
@@ -1585,11 +1585,20 @@ class App:
         # What's New panel (scrollable)
         self._draw_menu_news()
 
+    def _update_notes(self, info):
+        """Release notes for the current UI language (EN fallback), no CR."""
+        raw = ""
+        if self.lang == "zh":
+            raw = str((info or {}).get("notes_zh", "") or "")
+        if not raw:
+            raw = str((info or {}).get("notes", "") or "")
+        return raw.replace("\r", "")
+
     def _draw_menu_news(self):
         area = pygame.Rect(70, 522, 1130, 248)
         self._panel(self.screen, area, self._t("menu_whatsnew"))
         info = self.update_info or {}
-        notes = info.get("notes", "")
+        notes = self._update_notes(info)
         body = pygame.Rect(area.x + 16, area.y + 44, area.width - 32, area.height - 58)
         if self.update_state == "checking":
             t = get_font(17).render(self._t("menu_news_checking"), True, COLOR_DIM)
