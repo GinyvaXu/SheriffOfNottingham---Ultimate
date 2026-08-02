@@ -1,7 +1,7 @@
 {
   "id": "medieval",
   "name": "Medieval England",
-  "version": "1.0.0",
-  "description": "Medieval reskin: orchard apples, monastery cheese, war crossbows and mead. Client-side only. / 中世纪换皮：果园苹果、修道院奶酪、战弩与蜂蜜酒。仅客户端生效。",
+  "version": "1.1.0",
+  "description": "Medieval reskin with period goods: fattened capons, monastery cheese, oat loaves and monks' mead. Client-side only. / 中世纪换皮：肥育阉鸡、修道院奶酪、燕麦面包与修士蜜酒等时代货物。仅客户端生效。",
   "enabled": false
 }

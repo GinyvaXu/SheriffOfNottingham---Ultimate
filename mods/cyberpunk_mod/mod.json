@@ -1,7 +1,7 @@
 {
   "id": "cyberpunk",
   "name": "Cyberpunk Overlay",
-  "version": "1.1.0",
-  "description": "Neon reskin: all goods names, phases and key UI terms get a cyberpunk flavor. Client-side only. / 霓虹赛博风格：所有货物名、阶段名与关键界面词改成赛博朋克风味。仅客户端生效。",
+  "version": "1.2.0",
+  "description": "Neon reskin with iconic cyberpunk goods: rail-guns, neuro-stims, night-brew and memory silk. Client-side only. / 霓虹赛博风格：磁轨枪、神经兴奋剂、夜酿与记忆丝绸等未来都市货物。仅客户端生效。",
   "enabled": false
 }

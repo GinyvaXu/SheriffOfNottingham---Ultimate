@@ -8,22 +8,22 @@ enable it from the in-game Mods screen and restart.
 """
 
 _NAMES_EN = {
-    'APPLE': 'Brass Apple',
+    'APPLE': 'Brass Apples',
     'BLACK_MARKET': 'Underforge',
     'BREAD': 'Boiler Bread',
-    'CHEESE': 'Cog Cheese',
-    'CHICKEN': 'Clockwork Chicken',
+    'CHEESE': 'Cog-Cheese',
+    'CHICKEN': 'Clockwork Fowl',
     'COFFEE': 'Espresso Boiler',
-    'CROSSBOW': 'Steam Crossbow',
+    'CROSSBOW': 'Steam Rifles',
     'ROYAL_BLUE_CHEESE': 'Blue Flame',
     'ROYAL_CHICKEN': 'Steam Rooster',
     'ROYAL_COARSE_BREAD': 'Furnace Bread',
     'ROYAL_GOLD_APPLE': 'Golden Gear',
     'ROYAL_GOUDA_CHEESE': 'Workshop Cheese',
-    'ROYAL_GREEN_APPLE': 'Verdigris Apple',
+    'ROYAL_GREEN_APPLE': 'Verdigris Fruit',
     'ROYAL_RYE_BREAD': 'Railway Rye',
     'SILK': 'Velvet Steam-Silk',
-    'WINE': 'Coal Gin',
+    'WINE': 'Coal Whiskey',
 }
 
 _NAMES_ZH = {
@@ -31,18 +31,18 @@ _NAMES_ZH = {
     'BLACK_MARKET': '地下锻造坊',
     'BREAD': '锅炉面包',
     'CHEESE': '齿轮奶酪',
-    'CHICKEN': '发条鸡',
+    'CHICKEN': '发条禽',
     'COFFEE': '蒸汽咖啡',
-    'CROSSBOW': '蒸汽弩',
+    'CROSSBOW': '蒸汽步枪',
     'ROYAL_BLUE_CHEESE': '蓝焰蓝纹',
     'ROYAL_CHICKEN': '蒸汽雄鸡',
-    'ROYAL_COARSE_BREAD': '熔炉粗粮',
+    'ROYAL_COARSE_BREAD': '熔炉面包',
     'ROYAL_GOLD_APPLE': '黄金齿轮',
     'ROYAL_GOUDA_CHEESE': '工坊奶酪',
-    'ROYAL_GREEN_APPLE': '铜绿苹果',
+    'ROYAL_GREEN_APPLE': '铜绿果',
     'ROYAL_RYE_BREAD': '铁路黑麦',
     'SILK': '天鹅绒蒸汽丝绸',
-    'WINE': '煤烟酒',
+    'WINE': '煤烟威士忌',
 }
 
 _COLORS = {
