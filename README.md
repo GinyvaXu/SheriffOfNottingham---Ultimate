@@ -24,8 +24,6 @@ test_ai_bots.py  Test for in-lobby AI bots (host adds bots, plays a full game)
 test_new_rules.py  Unit tests for royal goods & black market modules
 test_mods.py Mod loader unit tests (register/patch/enable/disable/errors)
 mods/        Built-in mod folder (README.md + example_mod, disabled by default)
-00_???_?????????.md    Project proposal (Chinese)
-01_???_Python???.md         Implementation plan (Chinese)
 ```
 
 ## Dependencies & install

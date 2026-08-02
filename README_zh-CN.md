@@ -24,8 +24,6 @@ test_new_rules.py  皇家赏赐卡 & 黑市任务单元测试
 test_mods.py 模组加载器单元测试（注册/修改/启用/禁用/报错）
 test_back_lobby.py  结算返回房间 + 同难度人机命名测试
 mods/        内置模组目录（README.md + example_mod，默认禁用）
-00_企画书_诺丁汉警长联机桌游.md    项目企画书（中文）
-01_计划书_Python极简版.md         实现计划书（中文）
 ```
 
 ## 依赖与安装

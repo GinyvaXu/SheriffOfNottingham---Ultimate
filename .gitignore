@@ -11,6 +11,10 @@ __pycache__/
 cap_*.png
 smoke2*.png
 
+# project planning docs (local only, not published)
+00_*.md
+01_*.md
+
 # editor / os
 .vscode/
 .idea/
