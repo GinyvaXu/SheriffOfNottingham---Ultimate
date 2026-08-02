@@ -2143,33 +2143,41 @@ class App:
             b.draw(self.screen)
 
     def _wrap_text(self, text, font, max_w):
-        """Split text into lines that fit max_w pixels (CJK-safe: breaks long runs)."""
+        """Split text into lines that fit max_w pixels (CJK-safe, newline-aware:
+        every line break in the source becomes a paragraph break)."""
         lines = []
-        cur = ""
-        for w in text.split(" "):
-            if not w:
+        for para in str(text).split("\n"):
+            if not para.strip():
+                lines.append("")
                 continue
-            trial = (cur + " " + w).strip()
-            if font.size(trial)[0] <= max_w:
-                cur = trial
-            elif font.size(w)[0] <= max_w:
-                if cur:
-                    lines.append(cur)
-                cur = w
-            else:
-                if cur:
-                    lines.append(cur)
-                cur = ""
-                for ch in w:
-                    trial2 = cur + ch
-                    if font.size(trial2)[0] <= max_w:
-                        cur = trial2
-                    else:
-                        if cur:
-                            lines.append(cur)
-                        cur = ch
-        if cur:
-            lines.append(cur)
+            cur = ""
+            for w in para.split(" "):
+                if not w:
+                    continue
+                trial = (cur + " " + w).strip()
+                if font.size(trial)[0] <= max_w:
+                    cur = trial
+                elif font.size(w)[0] <= max_w:
+                    if cur:
+                        lines.append(cur)
+                    cur = w
+                else:
+                    if cur:
+                        lines.append(cur)
+                    cur = ""
+                    for ch in w:
+                        trial2 = cur + ch
+                        if font.size(trial2)[0] <= max_w:
+                            cur = trial2
+                        else:
+                            if cur:
+                                lines.append(cur)
+                            cur = ch
+            if cur:
+                lines.append(cur)
+            lines.append("")
+        while lines and lines[-1] == "":
+            lines.pop()
         return lines
 
     def _draw_block(self, surf, text, x, y_top, font, color, max_w):

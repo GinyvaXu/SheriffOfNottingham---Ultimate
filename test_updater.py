@@ -312,6 +312,23 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(man["version"], version.__version__)
         self.assertIn(man["version"], man["url"])
 
+    def test_repo_manifest_notes_zh_is_clean(self):
+        """Chinese release notes must not be corrupted to '?' characters.
+
+        Regression: notes_zh was once written through a GBK console pipe and
+        every Chinese char became '?', showing question marks in the in-game
+        update log (v1.6.0/v1.6.1).
+        """
+        root = os.path.dirname(os.path.abspath(__file__))
+        p = os.path.join(root, "update.json")
+        with open(p, encoding="utf-8") as f:
+            man = json.load(f)
+        zh = man.get("notes_zh", "")
+        self.assertTrue(zh, "notes_zh must not be empty")
+        self.assertNotIn("?", zh, "notes_zh must not contain '?'")
+        cjk = sum(1 for c in zh if "\u4e00" <= c <= "\u9fff")
+        self.assertGreater(cjk, 200, "notes_zh must contain real Chinese text")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
