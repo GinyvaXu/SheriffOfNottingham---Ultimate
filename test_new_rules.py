@@ -137,7 +137,7 @@ def test_view_and_messages():
     g = game.Game(ps, rng=game.random.Random(6))
     bmv = g.black_market_view()
     assert bmv is not None and len(bmv["types"]) == 3
-    assert set(bmv["progress"].keys()) == {0, 1}
+    assert "progress" not in bmv, "smuggling progress must stay secret"
     assert bmv["need"] == 3
     g2 = game.Game(ps, rng=game.random.Random(7), black_market=False, royal=False)
     assert g2.black_market_view() is None

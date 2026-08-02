@@ -196,6 +196,7 @@ class Player:
         self.bribe = None     # {"gold":..., "msg":...} merchant's standing offer
         self.sheriff_demand = None  # sheriff's counter-demand in gold (bargaining)
         self.bribe_round = 0        # counter-offers exchanged so far
+        self.bribe_first = 0    # original offer, restored if a counter-offer is rejected
         self.connected = True
         self.black_market_cards = 0   # black-market reward cards held (+25 each at game end)
         self.reputation = 0           # merchant reputation (rule mod)
@@ -247,6 +248,7 @@ class Game:
         self.inspect_idx = 0
         self.discard_hold = {}  # seat -> cards discarded this market turn, not yet placed
         self.draw_allow = {}    # seat -> how many more cards this player may draw this market turn
+        self.market_done = {}   # seat -> market turn finished (parallel market)
         # Black Market quest state (3 groups x 2 slots, one contraband type each)
         self.black_market = black_market
         self.quest_types = []
@@ -297,6 +299,8 @@ class Game:
             p.bribe = None
             p.sheriff_demand = None
             p.bribe_round = 0
+            p.bribe_first = 0
+        self.market_done = {}
         self.order = [(self.sheriff + i) % self.n for i in range(1, self.n)]
         if ROUTE_BONUS:
             pool = [t for t in LEGAL if GOODS[t]["cnt%d" % _card_counts(self.n)] > 0
@@ -311,7 +315,13 @@ class Game:
         self.draw_allow = {}
 
     def market_current(self):
-        return self.order[self.market_idx]
+        """First merchant who has not finished their parallel market turn (or None)."""
+        pending = self.market_pending()
+        return pending[0] if pending else None
+
+    def market_pending(self):
+        """All merchants who still have to finish their market turn this round."""
+        return [i for i in self.order if not self.market_done.get(i)]
 
     def _ensure_deck(self, need=1):
         if len(self.deck) >= need:
@@ -327,13 +337,17 @@ class Game:
         for c in placed:
             self.d1.append(c)
 
-    # ---------- Market ----------
+    # ---------- Market (all merchants act simultaneously) ----------
 
     def do_market_discard(self, seat, indices):
         if self.phase != "MARKET":
             return False, "Not the market phase"
-        if seat != self.market_current():
+        if seat not in self.order:
             return False, "Not your turn"
+        if self.market_done.get(seat):
+            return False, "You already finished the market"
+        if self.discard_hold.get(seat) is not None:
+            return False, "You already discarded this turn"
         idx = sorted(set(indices))
         limit = DISCARD_MAX
         if REPUTATION and self.players[seat].reputation >= REP_DISCARD_AT:
@@ -359,8 +373,10 @@ class Game:
     def do_market_draw(self, seat, source):
         if self.phase != "MARKET":
             return False, "Not the market phase"
-        if seat != self.market_current():
+        if seat not in self.order:
             return False, "Not your turn"
+        if self.market_done.get(seat):
+            return False, "You already finished the market"
         if source not in (None, "deck"):
             return False, "Only draw from the deck"
         if len(self.players[seat].hand) >= HAND_SIZE:
@@ -377,8 +393,8 @@ class Game:
 
     def finish_market_turn(self, seat):
         self._place_discards(seat)
-        self.market_idx += 1
-        if self.market_idx >= len(self.order):
+        self.market_done[seat] = True
+        if not self.market_pending():
             self.phase = "LOAD"
 
     # ---------- Load bag ----------
@@ -408,19 +424,26 @@ class Game:
     # ---------- Declare ----------
 
     def declare_current(self):
-        return self.order[self.decl_idx]
+        """First merchant who has not declared yet (or None)."""
+        pending = self.declare_pending()
+        return pending[0] if pending else None
+
+    def declare_pending(self):
+        """All merchants who still have to declare this round (parallel declare)."""
+        return [i for i in self.order if self.players[i].decl is None]
 
     def do_declare(self, seat, ctype):
         if self.phase != "DECLARE":
             return False, "Not the declaration phase"
-        if seat != self.declare_current():
+        if seat not in self.order:
             return False, "Not your turn"
+        if self.players[seat].decl is not None:
+            return False, "You already declared"
         if ctype not in LEGAL:
             return False, "You can only declare legal goods"
         p = self.players[seat]
         p.decl = {"type": ctype, "count": len(p.bag)}
-        self.decl_idx += 1
-        if self.decl_idx >= len(self.order):
+        if not self.declare_pending():
             self.phase = "INSPECT"
             self.inspect_idx = 0
         return True, ""
@@ -440,6 +463,7 @@ class Game:
             return False, "A bribe was already offered"
         gold = max(0, min(int(gold or 0), p.gold))
         p.bribe = {"gold": gold, "msg": (msg or "")[:80]}
+        p.bribe_first = gold
         p.sheriff_demand = None
         p.bribe_round = 0
         return True, ""
@@ -492,8 +516,12 @@ class Game:
             self._next_merchant(owner, events)
             return True, events
         if action == "reject":
-            owner.bribe = {"gold": 0, "msg": ""}
+            # Negotiation failed: fall back to the merchant's ORIGINAL offer, so
+            # the Sheriff can still pass/inspect at that price.
+            owner.bribe = {"gold": owner.bribe_first or 0,
+                           "msg": (owner.bribe or {}).get("msg", "")}
             owner.sheriff_demand = None
+            owner.bribe_round = 0
             return True, ["{0} rejects the counter-offer".format(owner.name)]
         if action == "counter":
             if owner.bribe_round >= BRIBE_MAX_ROUNDS:
@@ -546,6 +574,7 @@ class Game:
         owner.bribe = None
         owner.sheriff_demand = None
         owner.bribe_round = 0
+        owner.bribe_first = 0
         self.inspect_idx += 1
         if self.inspect_idx >= len(self.order):
             self.end_round()
@@ -656,16 +685,11 @@ class Game:
         """Public black-market quest state for the UI (None when disabled)."""
         if not self.black_market:
             return None
-        progress = {}
-        for i, p in enumerate(self.players):
-            progress[i] = {t: sum(1 for c in p.stand_contra if c["type"] == t)
-                           for t in self.quest_types}
         return {
             "types": list(self.quest_types),
             "rewards": {t: list(self.quest_rewards.get(t, [0, 0])) for t in self.quest_types},
             "claimed": dict(self.quest_claimed),
             "claimers": {t: list(self.quest_claimers.get(t, [None, None])) for t in self.quest_types},
-            "progress": progress,
             "need": BLACK_MARKET_NEED,
         }
 

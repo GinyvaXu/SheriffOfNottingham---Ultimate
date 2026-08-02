@@ -87,12 +87,15 @@ def test_merchant_reject_returns_ball_to_sheriff():
     g.do_counter_bribe(sh, 12)
     ok, ev = g.do_respond_counter(owner, "reject")
     assert ok and ev == ["A rejects the counter-offer"]
-    assert g.players[owner].bribe["gold"] == 0
+    # Rejection falls back to the merchant's ORIGINAL offer (3 gold), so the
+    # Sheriff can still pass/inspect at that price instead of getting nothing.
+    assert g.players[owner].bribe["gold"] == 3
     assert g.players[owner].sheriff_demand is None
     gold_sh = g.players[sh].gold
     ok, ev = g.do_inspect_decision(sh, "pass")
     assert ok
-    assert g.players[sh].gold == gold_sh          # no bribe was paid
+    assert g.players[sh].gold == gold_sh + 3      # original bribe is paid
+    assert any("A bribes the Sheriff 3 gold" in e for e in ev)
     assert any("A passes unchecked" in e for e in ev)
 
 

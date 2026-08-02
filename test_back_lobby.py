@@ -46,6 +46,9 @@ def main():
     print("unique bot names OK:", bot_names)
 
     # start a game, force it to GAME_OVER, then go back to the lobby
+    host.c.send({"t": "ready"})
+    guest.c.send({"t": "ready"})
+    time.sleep(0.2)
     host.c.send({"t": "start_game", "rounds": 2})
     time.sleep(0.6)
     if srv.game is None:

@@ -232,6 +232,29 @@ python test_bot.py --players 5        # 5-player game
 python test_ai_bots.py --rounds 2     # in-lobby AI bots
 ```
 
+## Windows Smart App Control blocks the game
+
+Fresh Windows 11 devices enable **Smart App Control (SAC)**, which blocks
+unsigned executables from unknown publishers. The game is currently unsigned,
+so after installing, SAC may show:
+
+> "Smart App Control has blocked a potentially unsafe app ... the publisher could not be verified"
+
+Players can work around it:
+- Turn it off: Windows Security -> App & browser control -> Smart App Control -> **Off**.
+  Note: turning SAC off is permanent for that PC (it can only be re-enabled by resetting Windows).
+- If the installer came from a browser download, first right-click the .exe -> Properties -> **Unblock**.
+
+Developers can remove the block for everyone by code-signing **both** the game exe
+and the installer with a publicly trusted certificate (an OV/EV certificate or
+Microsoft Azure Trusted Signing), then run:
+
+```
+.\sign_assets.ps1 -Thumbprint <CERT_SHA1>
+```
+
+See the header of `sign_assets.ps1` for details.
+
 ## Known limitations
 
 - Trust mode: the host is the server, theoretically cheat-able; for friends only.

@@ -110,6 +110,9 @@ def main():
             ok = False
         else:
             print("PASS lobby joined carries avatars")
+        host.send({"t": "ready"})
+        guest.send({"t": "ready"})
+        time.sleep(0.2)
         host.send({"t": "start_game", "rounds": 2})
         views = _drain(guest, 1.5)
         view = next((m for m in views if m.get("t") == "view"), None)

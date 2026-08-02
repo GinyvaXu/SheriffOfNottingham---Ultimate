@@ -133,6 +133,9 @@ def main():
                   hl2 and hl2.get("mods_ok"))
             srv.stop()
             return 1
+        host.send({"t": "ready"})
+        guest2.send({"t": "ready"})
+        time.sleep(0.2)
         host.send({"t": "start_game", "rounds": 2})
         time.sleep(0.9)
         if srv.game is None:

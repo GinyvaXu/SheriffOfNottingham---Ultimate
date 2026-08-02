@@ -189,14 +189,14 @@ def main():
         print("PASS reputation -1 on caught lie (fine paid %d)" % fine_paid)
         # discard limit perk
         game.REPUTATION = 1
-        p = g.players[0]
-        p.reputation = 1
-        p.hand = [{"type": "APPLE", "value": 2, "fine": 2} for _ in range(7)]
         g.phase = "MARKET"
-        g.order = [0, 1, 2]
+        g.order = [i for i in range(g.n) if i != g.sheriff]
         g.market_idx = 0
         g.discard_hold = {}
-        okk, err = g.do_market_discard(0, list(range(6)))
+        p = g.players[g.order[0]]
+        p.reputation = 1
+        p.hand = [{"type": "APPLE", "value": 2, "fine": 2} for _ in range(7)]
+        okk, err = g.do_market_discard(g.order[0], list(range(6)))
         if not okk:
             print("FAIL rep extra discard:", err)
             ok = False

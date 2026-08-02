@@ -70,6 +70,7 @@ def main():
         return 1
     print("Remove/add bot OK")
 
+    host.c.send({"t": "ready"})
     host.c.send({"t": "start_game", "rounds": args.rounds})
     print("Game started with 1 human + 2 bots, playing...")
 

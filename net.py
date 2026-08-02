@@ -11,6 +11,7 @@ import time
 import bot
 import game
 import profile
+import version
 
 DEFAULT_PORT = 5555
 BOT_DELAY = 0.5   # pause between autonomous bot actions so humans can follow
@@ -137,6 +138,13 @@ class GameServer:
             return
         rules = self._norm_mods(msg.get("mods"))
         avatar = profile.avatar_from_payload(msg.get("avatar"))
+        ver = str(msg.get("ver", "")).strip()
+        if ver != version.__version__:
+            _send(conn, {"t": "error", "code": "version",
+                         "msg": "Version mismatch: host is v{0}, you are v{1}".format(
+                             version.__version__, ver or "?")})
+            conn.close()
+            return
         name = str(msg.get("name", "")).strip()
         if not name:
             _send(conn, {"t": "error", "msg": "Name cannot be empty"})
@@ -154,7 +162,7 @@ class GameServer:
                     conn.close()
                     return
                 self.seats[seat] = {"name": name, "conn": conn, "reader": reader,
-                                    "seat": seat, "game_seat": None,
+                                    "seat": seat, "game_seat": None, "ready": False,
                                     "rules_mods": rules, "avatar": avatar}
                 _send(conn, {"t": "welcome", "seat": seat, "name": name, "host": seat == 0})
                 self._broadcast_lobby()
@@ -251,7 +259,8 @@ class GameServer:
     def _broadcast_lobby(self):
         joined = [{"seat": i, "name": s["name"], "host": i == 0,
                    "bot": s.get("bot"), "avatar": s.get("avatar"),
-                   "personality": s.get("personality")}
+                   "personality": s.get("personality"),
+                   "ready": bool(s.get("ready"))}
                   for i, s in enumerate(self.seats) if s is not None]
         conflicts = []
         try:
@@ -268,10 +277,11 @@ class GameServer:
             players_mods.append({"seat": i, "name": s["name"],
                                  "mods": host_mods if s.get("bot") else s.get("rules_mods", [])})
         mods_ok = all(self._seat_mods_ok(s) for s in self.seats if s is not None)
+        all_ready = len(joined) >= 2 and all(j.get("ready") for j in joined)
         for i, s in enumerate(self.seats):
             if s and s["conn"] is not None:
                 _send(s["conn"], {"t": "lobby", "max_players": self.max_players,
-                                  "joined": joined, "can_start": len(joined) >= 2 and i == 0,
+                                  "joined": joined, "can_start": all_ready and i == 0,
                                   "rules_mods": host_mods, "players_mods": players_mods,
                                   "mods_ok": mods_ok, "rmods_conflicts": conflicts})
 
@@ -292,6 +302,11 @@ class GameServer:
                     self._after_rename()
                 else:
                     _send(s["conn"], {"t": "error", "msg": err})
+                return
+            if t == "ready":
+                if not self.started:
+                    s["ready"] = not bool(s.get("ready"))
+                    self._broadcast_lobby()
                 return
             if not self.started:
                 if t == "start_game" and seat == 0:
@@ -315,6 +330,10 @@ class GameServer:
                         _send(s["conn"], {"t": "error",
                                           "msg": "Incompatible rule mods: " + names})
                         self._broadcast({"t": "mods_incompatible", "names": names})
+                        return
+                    if not all(self.seats[i].get("ready") for i in joined):
+                        _send(s["conn"], {"t": "error",
+                                          "msg": "All players must be ready to start"})
                         return
                     self._start_game(joined, msg.get("rounds"))
                 elif t == "add_bot" and seat == 0:
@@ -346,6 +365,7 @@ class GameServer:
                 if s is None:
                     continue
                 s["game_seat"] = None
+                s["ready"] = bool(s.get("bot"))
                 # drop human ghosts who never reconnected; bots stay in the room
                 if not s.get("bot") and s["conn"] is None:
                     self.seats[i] = None
@@ -479,7 +499,7 @@ class GameServer:
         self.seats[seat] = {"name": bot.bot_name(level, n + 1, personality),
                             "conn": None, "reader": None,
                             "seat": seat, "game_seat": None, "bot": level,
-                            "personality": personality,
+                            "personality": personality, "ready": True,
                             "avatar": {"kind": "builtin",
                                        "id": bot.bot_avatar(level, n + 1)}}
         self._broadcast_lobby()
@@ -510,10 +530,11 @@ class GameServer:
                 acted = False
                 try:
                     if g.phase == "MARKET":
-                        seat = g.market_current()
-                        if not self._is_bot(seat):
+                        pending = [i for i in g.order
+                                   if not g.market_done.get(i) and self._is_bot(i)]
+                        if not pending:
                             return
-                        acted = self._bot_market(seat)
+                        acted = any(self._bot_market(seat) for seat in pending)
                     elif g.phase == "LOAD":
                         pending = [i for i, p in enumerate(g.players)
                                    if i != g.sheriff and not p.bag_loaded and self._is_bot(i)]
@@ -521,10 +542,11 @@ class GameServer:
                             return
                         acted = self._bot_load_bags(pending)
                     elif g.phase == "DECLARE":
-                        seat = g.declare_current()
-                        if not self._is_bot(seat):
+                        pending = [i for i in g.order
+                                   if g.players[i].decl is None and self._is_bot(i)]
+                        if not pending:
                             return
-                        acted = self._bot_declare(seat)
+                        acted = any(self._bot_declare(seat) for seat in pending)
                     elif g.phase == "INSPECT":
                         target = g.inspect_current()
                         tp = g.players[target]
@@ -558,12 +580,12 @@ class GameServer:
         for _ in range(8):
             if len(p.hand) >= game.HAND_SIZE or g.draw_allow.get(seat, 0) <= 0:
                 break
-            if g.phase != "MARKET" or g.market_current() != seat:
+            if g.phase != "MARKET" or g.market_done.get(seat):
                 break
             ok2, _ = g.do_market_draw(seat, "deck")
             if not ok2:
                 break
-        if g.phase == "MARKET" and g.market_current() == seat:
+        if g.phase == "MARKET" and not g.market_done.get(seat):
             g.finish_market_turn(seat)
         self._broadcast_views()
         return True
@@ -665,14 +687,14 @@ class GameServer:
     def _prompt_for(self, gseat):
         g = self.game
         p = g.players[gseat]
-        if g.phase == "MARKET" and gseat == g.market_current():
+        if g.phase == "MARKET" and gseat in g.order and not g.market_done.get(gseat):
             if not self._discarded.get(gseat):
                 return {"kind": "market_discard", "max_discard": min(game.DISCARD_MAX, len(p.hand))}
             return {"kind": "market_draw", "hand": len(p.hand),
                     "draw_left": g.draw_allow.get(gseat, 0)}
         if g.phase == "LOAD" and gseat != g.sheriff and not p.bag_loaded:
             return {"kind": "load_bag"}
-        if g.phase == "DECLARE" and gseat == g.declare_current():
+        if g.phase == "DECLARE" and gseat in g.order and p.decl is None:
             return {"kind": "declare", "bag_count": len(p.bag)}
         if g.phase == "INSPECT":
             target = g.players[g.inspect_current()]
@@ -692,12 +714,10 @@ class GameServer:
 
     def _acting_name(self):
         g = self.game
-        if g.phase == "MARKET":
-            return g.players[g.market_current()].name
+        if g.phase in ("MARKET", "DECLARE"):
+            return None  # merchants act simultaneously
         if g.phase == "LOAD":
             return "Waiting for merchants to load bags"
-        if g.phase == "DECLARE":
-            return g.players[g.declare_current()].name
         if g.phase == "INSPECT":
             t = g.inspect_current()
             tp = g.players[t]
@@ -709,7 +729,8 @@ class GameServer:
     def _acting_phase(self):
         g = self.game
         if g.phase == "MARKET":
-            if not self._discarded.get(g.market_current()):
+            cur = g.market_current()
+            if cur is None or not self._discarded.get(cur):
                 return "market_discard"
             return "market_draw"
         if g.phase == "LOAD":
@@ -856,17 +877,17 @@ class GameServer:
                     continue
                 gseat = None
                 if g.phase == "MARKET":
-                    cur = g.market_current()
-                    if not self._is_bot(cur):
-                        gseat = cur
+                    pending = [i for i in g.order
+                               if not g.market_done.get(i) and not self._is_bot(i)]
+                    gseat = pending[0] if pending else None
                 elif g.phase == "LOAD":
                     pending = [i for i, p in enumerate(g.players)
                                if i != g.sheriff and not p.bag_loaded and not self._is_bot(i)]
                     gseat = pending[0] if pending else None
                 elif g.phase == "DECLARE":
-                    cur = g.declare_current()
-                    if not self._is_bot(cur):
-                        gseat = cur
+                    pending = [i for i in g.order
+                               if g.players[i].decl is None and not self._is_bot(i)]
+                    gseat = pending[0] if pending else None
                 elif g.phase == "INSPECT":
                     cur = g.inspect_current()
                     p = g.players[cur]
@@ -951,7 +972,8 @@ class GameClient:
             rules = mods.rules_mods()
         if avatar is None:
             avatar = profile.avatar_payload(profile.load_profile())
-        self.send({"t": "hello", "name": name, "mods": rules, "avatar": avatar})
+        self.send({"t": "hello", "name": name, "mods": rules, "avatar": avatar,
+                         "ver": version.__version__})
         self.thread = threading.Thread(target=self._read_loop, daemon=True)
         self.thread.start()
 

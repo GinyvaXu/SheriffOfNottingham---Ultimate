@@ -78,6 +78,9 @@ class Bot:
             self.c.send({"t": "declare", "type": self.rng.choice(game.LEGAL)})
         elif kind == "bribe":
             self.c.send({"t": "bribe", "gold": self.rng.choice([0, 0, 1, 2, 3]), "msg": ""})
+        elif kind == "counter_bribe":
+            self.c.send({"t": "counter_response",
+                         "action": self.rng.choice(["accept", "reject"]), "gold": 0})
         elif kind == "inspect":
             self.c.send({"t": "inspect_decision",
                          "action": self.rng.choice(["pass", "inspect"])})
@@ -104,6 +107,9 @@ def main():
         print("FAIL: not all bots entered the lobby")
         srv.stop()
         return 1
+    for b in bots:
+        b.c.send({"t": "ready"})
+    time.sleep(0.2)
     bots[0].c.send({"t": "start_game"})
     print("Game started, bots playing...")
 
