@@ -8,6 +8,7 @@ enable it from the in-game Mods screen and restart.
 """
 
 _NAMES_EN = {
+    'POT': 'Data Credits',
     'APPLE': 'Synth-Fruit',
     'BLACK_MARKET': 'DarkNet',
     'BREAD': 'Nutri-Bread',
@@ -27,6 +28,7 @@ _NAMES_EN = {
 }
 
 _NAMES_ZH = {
+    'POT': '数据信用点',
     'APPLE': '合成果',
     'BLACK_MARKET': '暗网',
     'BREAD': '营养面包',
@@ -46,6 +48,7 @@ _NAMES_ZH = {
 }
 
 _COLORS = {
+    'POT': (0, 255, 180),
     'APPLE': (110, 235, 130),
     'BLACK_MARKET': (0, 255, 220),
     'BREAD': (190, 140, 80),

@@ -8,6 +8,7 @@ enable it from the in-game Mods screen and restart.
 """
 
 _NAMES_EN = {
+    'POT': 'Arcane Vault',
     'APPLE': 'Fey Fruit',
     'BLACK_MARKET': 'Shadow Bazaar',
     'BREAD': 'Enchanted Loaves',
@@ -27,6 +28,7 @@ _NAMES_EN = {
 }
 
 _NAMES_ZH = {
+    'POT': '奥术宝库',
     'APPLE': '仙灵果',
     'BLACK_MARKET': '暗影集市',
     'BREAD': '附魔面包',
@@ -46,6 +48,7 @@ _NAMES_ZH = {
 }
 
 _COLORS = {
+    'POT': (150, 120, 220),
     'APPLE': (140, 220, 110),
     'BLACK_MARKET': (150, 80, 230),
     'BREAD': (200, 160, 100),

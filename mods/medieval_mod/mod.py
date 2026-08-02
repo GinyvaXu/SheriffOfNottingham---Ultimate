@@ -8,6 +8,7 @@ enable it from the in-game Mods screen and restart.
 """
 
 _NAMES_EN = {
+    'POT': 'Royal Coffer',
     'APPLE': 'Orchard Apples',
     'BLACK_MARKET': "Smugglers' Den",
     'BREAD': 'Oat Loaves',
@@ -27,6 +28,7 @@ _NAMES_EN = {
 }
 
 _NAMES_ZH = {
+    'POT': '皇家金库',
     'APPLE': '果园苹果',
     'BLACK_MARKET': '走私者巢穴',
     'BREAD': '燕麦面包',
@@ -46,6 +48,7 @@ _NAMES_ZH = {
 }
 
 _COLORS = {
+    'POT': (220, 190, 90),
     'APPLE': (150, 210, 90),
     'BLACK_MARKET': (60, 60, 60),
     'BREAD': (190, 150, 90),

@@ -8,6 +8,7 @@ enable it from the in-game Mods screen and restart.
 """
 
 _NAMES_EN = {
+    'POT': 'Credits Cache',
     'APPLE': 'Hydroponic Fruit',
     'BLACK_MARKET': 'Smuggler Ring',
     'BREAD': 'Nutri-Paste Loaf',
@@ -27,6 +28,7 @@ _NAMES_EN = {
 }
 
 _NAMES_ZH = {
+    'POT': '信用点舱',
     'APPLE': '水培果',
     'BLACK_MARKET': '走私星环',
     'BREAD': '营养膏包',
@@ -46,6 +48,7 @@ _NAMES_ZH = {
 }
 
 _COLORS = {
+    'POT': (120, 200, 255),
     'APPLE': (120, 230, 150),
     'BLACK_MARKET': (90, 200, 255),
     'BREAD': (200, 170, 110),

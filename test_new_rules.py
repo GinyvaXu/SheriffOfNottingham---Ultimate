@@ -148,10 +148,10 @@ def test_view_and_messages():
     zh = lang.translate(en, "zh")
     assert "\u9ed1\u5e02" in zh and "\u4e1d\u7ef8" in zh and "33" in zh, zh
     zh2 = lang.translate(
-        "Inspection of Bob: LIE! 2 contraband seized (Silkx1, Winex1), merchant pays 8 gold fine, 1 legal card(s) enter", "zh")
+        "Inspection of Bob: LIE! 2 contraband seized (Silkx1, Winex1), merchant pays 8 gold fine, 1 mismatched legal card(s) detained", "zh")
     assert "\u4e1d\u7ef8" in zh2 and "\u9152" in zh2 and "\u7f5a\u6b3e" in zh2, zh2
-    zh3 = lang.translate("Inspection of Bob: LIE but all legal - 2 card(s) enter, nothing seized", "zh")
-    assert "\u65e0\u6ca1\u6536" in zh3, zh3
+    zh3 = lang.translate("Inspection of Bob: LIE! 3 mismatched legal card(s) detained, no fine", "zh")
+    assert "\u6263\u7559" in zh3 and "\u4e0d\u7f5a\u6b3e" in zh3, zh3
     zh4 = lang.translate("Alice discarded 3 card(s) (2 legal, 1 contraband). Draw to 6.", "zh")
     assert "\u5408\u6cd5" in zh4 and "\u8fdd\u7981\u54c1" in zh4, zh4
     zh5 = lang.translate("Bob sealed their bag (2 card(s))", "zh")
@@ -162,7 +162,8 @@ def test_view_and_messages():
 
 
 def test_confiscation_fines():
-    """Custom rule: caught lie -> seize contraband/royal only, legal cards pass, merchant pays fine."""
+    """Custom rule: caught lie -> seize contraband/royal (merchant pays fine),
+    mismatched legal goods are detained (??) without any fine, declared goods pass."""
     ps = [game.Player("A"), game.Player("B")]
     g = game.Game(ps, rng=game.random.Random(8))
     g.quest_types = []
@@ -170,6 +171,7 @@ def test_confiscation_fines():
     g.quest_claimers = {}
     g.quest_rewards = {}
     ps[0].bag = [{"type": "APPLE", "value": 2, "fine": 2}, {"type": "APPLE", "value": 2, "fine": 2},
+                 {"type": "CHICKEN", "value": 4, "fine": 2},
                  {"type": "SILK", "value": 8, "fine": 4},
                  {"type": "ROYAL_GREEN_APPLE", "value": 4, "fine": 3,
                   "royal": True, "royal_type": "APPLE", "equals": 2}]
@@ -184,10 +186,13 @@ def test_confiscation_fines():
     assert len(ps[0].stand_contra) == 0, ps[0].stand_contra       # royal was seized too
     d1_types = [c["type"] for c in g.d1]
     assert "SILK" in d1_types and "ROYAL_GREEN_APPLE" in d1_types, d1_types
+    assert "CHICKEN" in d1_types, "mismatched legal must be detained, not delivered"
+    assert all(c["type"] != "CHICKEN" for c in ps[0].stand_legal)
     assert any("merchant pays 7 gold fine" in e and "Silkx1" in e for e in events), events
+    assert any("1 mismatched legal card(s) detained" in e for e in events), events
     assert any("Round 0 complete" in e or "Game over" in e for e in events), events
-    assert ps[1].gold == 57 and ps[0].gold == 43                   # silk(4) + royal(3) fine
-    print("PASS confiscation rule (seize contraband/royal, legal passes, merchant pays fine)")
+    assert ps[1].gold == 57 and ps[0].gold == 43                   # silk(4) + royal(3) fine only
+    print("PASS confiscation rule (seize contraband/royal + fine, detain mismatched legal, no fine)")
 
 
 def test_rounds_total_override():

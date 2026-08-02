@@ -8,6 +8,7 @@ enable it from the in-game Mods screen and restart.
 """
 
 _NAMES_EN = {
+    'POT': 'Bank of Brass',
     'APPLE': 'Brass Apples',
     'BLACK_MARKET': 'Underforge',
     'BREAD': 'Boiler Bread',
@@ -27,6 +28,7 @@ _NAMES_EN = {
 }
 
 _NAMES_ZH = {
+    'POT': '黄铜银行',
     'APPLE': '黄铜苹果',
     'BLACK_MARKET': '地下锻造坊',
     'BREAD': '锅炉面包',
@@ -46,6 +48,7 @@ _NAMES_ZH = {
 }
 
 _COLORS = {
+    'POT': (210, 160, 60),
     'APPLE': (200, 170, 80),
     'BLACK_MARKET': (80, 90, 110),
     'BREAD': (170, 130, 80),

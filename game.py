@@ -615,14 +615,15 @@ class Game:
                     owner.reputation += 1
                     events.append("{0}'s reputation +1 -> {1}".format(owner.name, owner.reputation))
             else:
+                delivered = []
                 for c in declared:
+                    delivered.append(c)
                     events.extend(self._deliver(owner, c))
-                seized, passed = [], []
+                seized, detained = [], []
                 for c in hidden:
-                    (seized if is_contraband(c) else passed).append(c)
-                for c in passed:
-                    events.extend(self._deliver(owner, c))
+                    (seized if is_contraband(c) else detained).append(c)
                 self.d1.extend(seized)
+                self.d1.extend(detained)
                 if seized:
                     detail = ", ".join("{0}x{1}".format(TYPE_EN[t], n) for t, n in _counts(seized).items())
                     fine = sum(c.get("fine", c["value"]) for c in seized)
@@ -633,15 +634,15 @@ class Game:
                     events.append(
                         "Inspection of {0}: LIE! {1} contraband seized "
                         "({2}), merchant pays {3} gold fine, "
-                        "{4} legal card(s) enter".format(
-                            owner.name, len(seized), detail, fine, len(passed)))
+                        "{4} mismatched legal card(s) detained".format(
+                            owner.name, len(seized), detail, fine, len(detained)))
                     if res != "pays {0} gold".format(fine):
                         events.append(res)
                 else:
                     events.append(
-                        "Inspection of {0}: LIE but all legal - "
-                        "{1} card(s) enter, nothing seized".format(owner.name, len(hidden)))
-                self._route_bonus(owner, owner.bag, events)
+                        "Inspection of {0}: LIE! {1} mismatched legal card(s) "
+                        "detained, no fine".format(owner.name, len(detained)))
+                self._route_bonus(owner, delivered, events)
                 if REPUTATION:
                     owner.reputation -= 1
                     events.append("{0}'s reputation -1 -> {1}".format(owner.name, owner.reputation))

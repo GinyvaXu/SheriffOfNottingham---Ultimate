@@ -190,7 +190,12 @@ class TextInput:
             elif ev.key == pygame.K_RETURN:
                 return "submit"
             elif ev.key == pygame.K_v and (ev.mod & pygame.KMOD_CTRL):
-                self.text += self._clipboard_text()
+                # Paste REPLACES the whole field: appending made copied
+                # addresses (e.g. "ip:port") duplicate when pasting twice
+                # or into a field that already had content.
+                pasted = self._clipboard_text()
+                if pasted:
+                    self.text = pasted
         return False
 
     @staticmethod
@@ -200,7 +205,13 @@ class TextInput:
             if raw:
                 for enc in ("utf-8", "utf-16-le", "gbk"):
                     try:
-                        return raw.decode(enc).replace("\x00", "")
+                        text = raw.decode(enc)
+                        # Strip NULs, BOM and line breaks that clipboard
+                        # formats often append (UTF-16 terminator, CR/LF).
+                        return "".join(
+                            ch for ch in text
+                            if ch not in ("\x00", "\ufeff", "\r", "\n")
+                        ).strip()
                     except (UnicodeDecodeError, ValueError):
                         continue
         except Exception:
@@ -260,6 +271,8 @@ class App:
         self.lobby_mods_scroll = 0
         self.menu_news_scroll = 0
         self.chat_scroll = 0
+        self.chat_max_scroll = 0
+        self.chat_drag = False
         self.ready = False
         self.mods_row_buttons = []
         self.market_row_buttons = []
@@ -419,6 +432,9 @@ class App:
         addr = self.join_input.text.strip()
         if not addr:
             return
+        addr = "".join(ch for ch in addr if ch not in ("\x00", "\ufeff", "\r", "\n")).strip()
+        if not addr:
+            return
         if ":" in addr:
             h, _, p = addr.rpartition(":")
             try:
@@ -455,7 +471,7 @@ class App:
             if ev.type == pygame.MOUSEWHEEL:
                 news = pygame.Rect(70, 522, 1130, 248)
                 if news.collidepoint(pygame.mouse.get_pos()):
-                    self.menu_news_scroll = max(0, self.menu_news_scroll - ev.y * 28)
+                    self.menu_news_scroll = max(0, self.menu_news_scroll - int(ev.y) * 28)
         elif self.screen_name == "lobby":
             self.lobby_rename_input.handle(ev)
             self.rounds_input.handle(ev)
@@ -464,10 +480,10 @@ class App:
             if ev.type == pygame.MOUSEWHEEL:
                 area = pygame.Rect(610, 130, 580, 210)
                 if area.collidepoint(pygame.mouse.get_pos()):
-                    self.lobby_mods_scroll = max(0, self.lobby_mods_scroll - ev.y * 32)
+                    self.lobby_mods_scroll = max(0, self.lobby_mods_scroll - int(ev.y) * 32)
         elif self.screen_name == "mods":
             if ev.type == pygame.MOUSEWHEEL:
-                self.mods_scroll = max(0, self.mods_scroll - ev.y * 36)
+                self.mods_scroll = max(0, self.mods_scroll - int(ev.y) * 36)
                 self._rebuild_mods_ui()
             for b in self.buttons:
                 b.handle(ev)
@@ -475,7 +491,7 @@ class App:
                 b.handle(ev)
         elif self.screen_name == "market":
             if ev.type == pygame.MOUSEWHEEL:
-                self.market_scroll = max(0, self.market_scroll - ev.y * 36)
+                self.market_scroll = max(0, self.market_scroll - int(ev.y) * 36)
                 self._rebuild_market_ui()
             for b in self.buttons:
                 b.handle(ev)
@@ -483,7 +499,7 @@ class App:
                 b.handle(ev)
         elif self.screen_name == "update":
             if ev.type == pygame.MOUSEWHEEL:
-                self.update_scroll = max(0, self.update_scroll - ev.y * 26)
+                self.update_scroll = max(0, self.update_scroll - int(ev.y) * 26)
             for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "game":
@@ -505,9 +521,26 @@ class App:
                 if prompt.get("kind") == "bribe":
                     self.msg_input.handle(ev)
             if ev.type == pygame.MOUSEWHEEL:
-                chat_rect = pygame.Rect(880, 60, 390, 680)
-                if chat_rect.collidepoint(pygame.mouse.get_pos()):
-                    self.chat_scroll = max(0, self.chat_scroll + ev.y)
+                # Chat is the only scrollable area in-game; scroll it
+                # wherever the wheel is used (also immune to high-DPI
+                # mouse-coordinate mismatches) and keep the value an int
+                # so fractional touchpad deltas cannot corrupt drawing.
+                self.chat_scroll = max(0, int(self.chat_scroll) + int(ev.y))
+            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                body = pygame.Rect(890, 96, 372, 622)
+                bar = pygame.Rect(body.right - 10, body.y, 8, body.height)
+                if bar.collidepoint(ev.pos) and self.chat_max_scroll > 0:
+                    self.chat_drag = True
+                    frac = (ev.pos[1] - body.y) / max(1, body.height)
+                    self.chat_scroll = min(self.chat_max_scroll,
+                                           max(0, int(frac * (self.chat_max_scroll + 1))))
+            elif ev.type == pygame.MOUSEMOTION and self.chat_drag:
+                body = pygame.Rect(890, 96, 372, 622)
+                frac = (ev.pos[1] - body.y) / max(1, body.height)
+                self.chat_scroll = min(self.chat_max_scroll,
+                                       max(0, int(frac * (self.chat_max_scroll + 1))))
+            elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+                self.chat_drag = False
         elif self.screen_name == "over":
             for b in self.buttons:
                 b.handle(ev)
@@ -2020,9 +2053,10 @@ class App:
         line_h = 20
         visible = max(1, body.height // line_h)
         max_scroll = max(0, len(lines) - visible)
-        self.chat_scroll = min(self.chat_scroll, max_scroll)
-        self.screen.set_clip(body)
+        self.chat_max_scroll = max_scroll
+        self.chat_scroll = min(int(self.chat_scroll), max_scroll)
         start = max(0, len(lines) - visible - self.chat_scroll)
+        self.screen.set_clip(body)
         y = body.bottom - 4
         for i in range(len(lines) - 1, start - 1, -1):
             text, col = lines[i]
@@ -2033,8 +2067,16 @@ class App:
             self.screen.blit(rt, (body.x, y))
         self.screen.set_clip(None)
         if max_scroll > 0:
+            # scrollbar: track + draggable handle
+            track = pygame.Rect(body.right - 9, body.y, 7, body.height)
+            pygame.draw.rect(self.screen, (42, 36, 28), track, border_radius=3)
+            hh = max(24, int(body.height * visible / max(1, len(lines))))
+            frac = self.chat_scroll / max_scroll
+            hy = body.y + int(frac * (body.height - hh))
+            pygame.draw.rect(self.screen, COLOR_ACCENT,
+                             (track.x, hy, 7, hh), border_radius=3)
             hint = get_font(13).render(self._t("chat_scroll_hint"), True, COLOR_DIM)
-            self.screen.blit(hint, (880 + 390 - hint.get_width() - 10, 70))
+            self.screen.blit(hint, (880 + 390 - hint.get_width() - 24, 70))
         self.chat_input.draw(self.screen)
 
         pk = (prompt or {}).get("kind")
