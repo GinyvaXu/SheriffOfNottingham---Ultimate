@@ -14,6 +14,7 @@ import lang
 import market
 import mods
 import net
+import profile
 import updater
 import version
 
@@ -106,7 +107,7 @@ def get_font(size):
 
 class Button:
     def __init__(self, rect, text, cb=None, enabled=True, highlight=False,
-                 bg=None, border=None, value=None, sub=None):
+                 bg=None, border=None, value=None, sub=None, icon=None):
         self.rect = pygame.Rect(rect)
         self.text = text
         self.cb = cb
@@ -116,6 +117,7 @@ class Button:
         self.border = border  # border color override (contraband frame)
         self.value = value    # big number near the top (card value)
         self.sub = sub        # small bottom hint (fine / contraband tag)
+        self.icon = icon      # optional surface drawn instead of text
 
     def handle(self, ev):
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
@@ -156,6 +158,14 @@ class Button:
         if self.sub:
             t = get_font(13).render(self.sub, True, COLOR_DIM)
             surf.blit(t, t.get_rect(center=(self.rect.centerx, self.rect.bottom - 12)))
+        if self.icon is not None:
+            ic = self.icon
+            if ic.get_width() > self.rect.width - 8 or ic.get_height() > self.rect.height - 8:
+                scale = min((self.rect.width - 8) / ic.get_width(),
+                            (self.rect.height - 8) / ic.get_height())
+                ic = pygame.transform.smoothscale(ic, (int(ic.get_width() * scale),
+                                                       int(ic.get_height() * scale)))
+            surf.blit(ic, ic.get_rect(center=self.rect.center))
 
 
 class TextInput:
@@ -256,7 +266,14 @@ class App:
         self.mod_names = list(mod_names or [])
         self.mod_errors = list(mod_errors or [])
         self.mod_list = list(mod_list or [])
+        self.profile = profile.load_profile()
+        self.avatar_id = self.profile.get("avatar") or profile.DEFAULT_AVATAR
+        self.custom_avatar = self.profile.get("custom_avatar")
+        self.avatar_toast = ""
+        self.avatar_path_input = TextInput((430, 470, 300, 30), "")
+        self.avatar_buttons = []
         self.mods_toast = ""
+        self.mods_restart_needed = False
         self.market_mods = []
         self.market_error = ""
         self.market_state = "idle"     # idle | loading | installing | ready
@@ -289,6 +306,8 @@ class App:
 
         if self.name and self.name != self._t("default_name"):
             self.name_input.text = self.name
+        elif self.profile.get("name"):
+            self.name_input.text = self.profile["name"]
         self.players_input.text = str(self.players)
         if host:
             self._create_room(self.players, port, self.name)
@@ -353,6 +372,7 @@ class App:
         self.msg_input.placeholder = self._t("ph_note")
         self.rounds_input.placeholder = self._t("ph_rounds")
         self.lobby_rename_input.placeholder = self._t("ph_name")
+        self.avatar_path_input.placeholder = self._t("avatar_path_hint")
         pygame.display.set_caption(self._t("title"))
         if self.screen_name == "menu":
             self._rebuild_menu_ui()
@@ -384,6 +404,7 @@ class App:
         self._connect(self.name)
 
     def _join_room(self):
+        self._save_profile_name()
         addr = self.join_input.text.strip()
         if not addr:
             return
@@ -401,7 +422,8 @@ class App:
     def _connect(self, name):
         try:
             self.name = name
-            self.client = net.GameClient(self.host_addr[0], self.host_addr[1], name)
+            self.client = net.GameClient(self.host_addr[0], self.host_addr[1], name,
+                                         avatar=self._avatar_payload())
             self.screen_name = "lobby"
             self._append_chat(self._t("connected"))
         except OSError as e:
@@ -417,6 +439,8 @@ class App:
             self.name_input.handle(ev)
             self.players_input.handle(ev)
             self.join_input.handle(ev)
+            for b in self.avatar_buttons:
+                b.handle(ev)
             for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "lobby":
@@ -545,7 +569,20 @@ class App:
             Button((640, 560, 150, 44), self._t("btn_update"), self._open_update),
             Button((610, 398, 90, 36), self._t("btn_paste"), self._paste_join),
             Button((W - 170, 20, 140, 40), self._t("btn_lang"), self._toggle_lang),
+            Button((750, 406, 130, 34), self._t("btn_avatar_upload"), self._upload_avatar),
+            Button((750, 448, 130, 34), self._t("btn_avatar_clear"), self._clear_avatar),
         ]
+        self.avatar_buttons = []
+        for i, key in enumerate(profile.BUILTIN_AVATARS):
+            col, row = i % 4, i // 4
+            x = 750 + col * 62
+            y = 262 + row * 66
+            self.avatar_buttons.append(Button(
+                (x, y, 56, 56), "",
+                lambda k=key: self._pick_avatar(k),
+                icon=gfx.avatar_surface({"kind": "builtin", "id": key}, 52),
+                highlight=(key == self.avatar_id and not self.custom_avatar)))
+        self.avatar_path_input.placeholder = self._t("avatar_path_hint")
 
     def _toggle_lang(self):
         self._set_lang("en" if self.lang == "zh" else "zh")
@@ -558,6 +595,83 @@ class App:
         else:
             self.menu_note = ""
 
+    # ---------- Profile & avatars ----------
+
+    def _avatar_payload(self):
+        if self.custom_avatar:
+            return {"kind": "custom", "data": self.custom_avatar}
+        return {"kind": "builtin", "id": self.avatar_id}
+
+    def _save_profile_name(self):
+        nm = self.name_input.text.strip()
+        if nm:
+            self.profile["name"] = nm
+            profile.save_profile(self.profile)
+
+    def _pick_avatar(self, key):
+        self.avatar_id = key
+        self.custom_avatar = None
+        self.profile["avatar"] = key
+        self.profile["custom_avatar"] = None
+        self._save_profile_name()
+        profile.save_profile(self.profile)
+        self.avatar_toast = self._t("avatar_saved")
+        self._rebuild_menu_ui()
+
+    def _pick_image_file(self):
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            try:
+                path = filedialog.askopenfilename(
+                    title="Select avatar image",
+                    filetypes=[("Images", "*.png *.jpg *.jpeg *.bmp *.gif"), ("All files", "*.*")])
+            finally:
+                root.destroy()
+            return str(path or "").strip()
+        except Exception:  # noqa: BLE001 - tkinter missing in some builds
+            return self.avatar_path_input.text.strip()
+
+    def _upload_avatar(self):
+        path = self._pick_image_file()
+        if not path:
+            return
+        try:
+            surf = pygame.image.load(path)
+        except Exception as e:  # noqa: BLE001
+            self.avatar_toast = self._t("avatar_failed", e=e)
+            return
+        try:
+            if surf.get_width() > 512 or surf.get_height() > 512:
+                surf = pygame.transform.smoothscale(surf, (512, 512))
+            if surf.get_width() > surf.get_height():
+                w, h = 128, int(surf.get_height() * 128 / surf.get_width())
+            else:
+                h, w = 128, int(surf.get_width() * 128 / surf.get_height())
+            surf = pygame.transform.smoothscale(surf, (max(1, w), max(1, h)))
+            data, ok = profile.encode_png(surf, size=128)
+        except Exception as e:  # noqa: BLE001
+            self.avatar_toast = self._t("avatar_failed", e=e)
+            return
+        if not ok:
+            self.avatar_toast = self._t("avatar_failed", e="encode")
+            return
+        self.custom_avatar = data
+        self.profile["custom_avatar"] = data
+        self.profile["avatar"] = self.avatar_id
+        profile.save_profile(self.profile)
+        self.avatar_toast = self._t("avatar_saved")
+        self._rebuild_menu_ui()
+
+    def _clear_avatar(self):
+        self.custom_avatar = None
+        self.profile["custom_avatar"] = None
+        profile.save_profile(self.profile)
+        self.avatar_toast = self._t("avatar_saved")
+        self._rebuild_menu_ui()
+
     def _copy_lan(self):
         addr = f"{self.server.local_ip}:{self.port}" if self.server else ""
         if addr:
@@ -567,6 +681,7 @@ class App:
                 self._append_chat(self._t("conn_failed", e="clipboard"), COLOR_RED)
 
     def _create_room_click(self):
+        self._save_profile_name()
         name = self.name_input.text.strip() or self._t("default_name")
         players = self._parse_int(self.players_input.text, 4)
         players = max(2, min(5, players))
@@ -656,6 +771,7 @@ class App:
                 msgs.append(msg)
         if ok_all:
             self.lobby_mods_toast = self._t("mods_installed_restart")
+            self.mods_restart_needed = True
         else:
             self.lobby_mods_toast = self._t("market_failed", e="; ".join(msgs))
         self._rebuild_lobby_ui()
@@ -843,6 +959,31 @@ class App:
                        lambda: setattr(self, "done", True)),
             ]
 
+    def _restart_game(self):
+        """Restart the game process so mod/profile changes take effect."""
+        if self.client:
+            try:
+                self.client.close()
+            except Exception:
+                pass
+            self.client = None
+        if self.server:
+            try:
+                self.server.stop()
+            except Exception:
+                pass
+            self.server = None
+        try:
+            import subprocess
+            if getattr(sys, "frozen", False):
+                cmd = [sys.executable] + sys.argv[1:]
+            else:
+                cmd = [sys.executable, os.path.abspath(sys.argv[0])] + sys.argv[1:]
+            subprocess.Popen(cmd, cwd=os.getcwd(), close_fds=True)
+        except Exception:
+            pass
+        self.done = True
+
     # ---------- Mods management ----------
 
     def _open_mods(self):
@@ -860,6 +1001,8 @@ class App:
             return
         ok = mods.set_enabled(mod_id, not info["enabled"])
         self.mods_toast = self._t("mods_saved" if ok else "mods_save_failed")
+        if ok:
+            self.mods_restart_needed = True
         self.mod_list = mods.list_all_mods()
         self._rebuild_mods_ui()
 
@@ -896,14 +1039,18 @@ class App:
 
     def _rebuild_mods_ui(self):
         self.buttons = []
-        for i, m in enumerate(self.mod_list[:7]):
+        for i, m in enumerate(self.mod_list):
             label = self._t("mods_disable" if m["enabled"] else "mods_enable")
-            self.buttons.append(Button((1040, 138 + i * 80, 150, 36), label,
+            self.buttons.append(Button((1040, 138 + i * 72, 150, 36), label,
                                        lambda mid=m["id"]: self._toggle_mod(mid)))
         self.buttons.append(Button((60, 700, 150, 44), self._t("btn_back"),
                                    self._back_to_menu))
         self.buttons.append(Button((230, 700, 150, 44), self._t("mods_refresh"),
                                    self._refresh_mods))
+        if self.mods_restart_needed:
+            self.buttons.append(Button((620, 700, 220, 44),
+                                       self._t("btn_restart_game"), self._restart_game,
+                                       highlight=True))
 
     def _draw_mods(self):
         title = get_font(36).render(self._t("mods_title"), True, COLOR_ACCENT)
@@ -918,23 +1065,19 @@ class App:
             t = get_font(20).render(self._t("mods_none"), True, COLOR_TEXT)
             self.screen.blit(t, (60, 150))
         y = 136
-        for i, m in enumerate(mlist[:7]):
-            pygame.draw.rect(self.screen, COLOR_PANEL, (60, y, 1160, 72), border_radius=8)
+        for i, m in enumerate(mlist):
+            pygame.draw.rect(self.screen, COLOR_PANEL, (60, y, 1160, 66), border_radius=8)
             state = self._t("mods_on" if m["enabled"] else "mods_off")
             mname = (m.get("name_zh") or m["name"]) if self.lang == "zh" else m["name"]
             t = get_font(20).render("{0}  v{1}   {2}".format(mname, m["version"], state),
                                     True, COLOR_GOLD if m["enabled"] else COLOR_TEXT)
-            self.screen.blit(t, (80, y + 8))
+            self.screen.blit(t, (80, y + 6))
             mdesc = ((m.get("description_zh") or "") or m.get("description", ""))                 if self.lang == "zh" else m.get("description", "")
             cat = self._category_label(m.get("category", "other"))
             if mdesc:
                 d = get_font(15).render((cat + "  " + mdesc)[:110], True, COLOR_DIM)
-                self.screen.blit(d, (80, y + 38))
-            y += 80
-        if len(mlist) > 7:
-            t = get_font(15).render(self._t("mods_more", n=len(mlist) - 7),
-                                    True, COLOR_DIM)
-            self.screen.blit(t, (60, y + 6))
+                self.screen.blit(d, (80, y + 34))
+            y += 72
         if self.mod_errors:
             t = get_font(15).render(self._t("mods_errors", s="; ".join(self.mod_errors)),
                                     True, COLOR_RED)
@@ -986,6 +1129,7 @@ class App:
         self.market_installing_id = ""
         if ok:
             self.market_toast = self._t("market_installed")
+            self.mods_restart_needed = True
         else:
             self.market_toast = self._t("market_failed", e=msg)
         self._rebuild_market_ui()
@@ -1004,7 +1148,7 @@ class App:
     def _rebuild_market_ui(self):
         self.buttons = []
         y = 140
-        for i, info in enumerate(self.market_mods[:6]):
+        for i, info in enumerate(self.market_mods):
             status, ver = market.local_status(info)
             btn_label = self._t("market_update" if status == "update" else "market_install")
             if status == "installed":
@@ -1013,15 +1157,19 @@ class App:
             elif self.market_state == "installing":
                 btn = None
             else:
-                btn = Button((1040, y + 20, 150, 36), btn_label,
+                btn = Button((1040, y + 18, 150, 36), btn_label,
                              lambda inf=info: self._install_market_mod(inf))
             if btn:
                 self.buttons.append(btn)
-            y += 80
+            y += 72
         self.buttons.append(Button((60, 700, 150, 44), self._t("btn_back"),
                                    self._back_to_menu))
         self.buttons.append(Button((230, 700, 150, 44), self._t("market_check"),
                                    self._refresh_market))
+        if self.mods_restart_needed:
+            self.buttons.append(Button((620, 700, 220, 44),
+                                       self._t("btn_restart_game"), self._restart_game,
+                                       highlight=True))
 
     def _draw_market(self):
         title = get_font(36).render(self._t("market_title"), True, COLOR_ACCENT)
@@ -1041,21 +1189,21 @@ class App:
             t = get_font(20).render(self._t("market_no_mods"), True, COLOR_TEXT)
             self.screen.blit(t, (60, 150))
         y = 140
-        for i, info in enumerate(self.market_mods[:6]):
+        for i, info in enumerate(self.market_mods):
             status, ver = market.local_status(info)
-            pygame.draw.rect(self.screen, COLOR_PANEL, (60, y, 1160, 72), border_radius=8)
+            pygame.draw.rect(self.screen, COLOR_PANEL, (60, y, 1160, 66), border_radius=8)
             label = self._category_label(info.get("category", "other")) + " " + self._market_label(info, status, ver)
             t = get_font(20).render(label, True, COLOR_TEXT)
-            self.screen.blit(t, (80, y + 8))
+            self.screen.blit(t, (80, y + 6))
             desc = (info.get("description") or {})
             dtext = desc.get(self.lang) or desc.get("en") or ""
             if dtext:
                 d = get_font(15).render(dtext[:110], True, COLOR_DIM)
-                self.screen.blit(d, (80, y + 38))
+                self.screen.blit(d, (80, y + 34))
             if self.market_state == "installing" and                     str(info.get("id") or "") == self.market_installing_id:
                 t = get_font(16).render(self._t("market_installing"), True, COLOR_GOLD)
-                self.screen.blit(t, (1040, y + 26))
-            y += 80
+                self.screen.blit(t, (1040, y + 24))
+            y += 72
         if self.market_toast:
             t = get_font(15).render(self.market_toast, True, COLOR_GREEN)
             self.screen.blit(t, (60, 674))
@@ -1257,6 +1405,20 @@ class App:
         if self.menu_note:
             t = get_font(16).render(self.menu_note, True, COLOR_DIM)
             self.screen.blit(t, (160, 468))
+        # Avatar picker
+        t = get_font(20).render(self._t("lbl_avatar"), True, COLOR_TEXT)
+        self.screen.blit(t, (640, 220))
+        hint = get_font(14).render(self._t("avatar_hint"), True, COLOR_DIM)
+        self.screen.blit(hint, (640, 246))
+        preview = gfx.avatar_surface(self._avatar_payload(), 72)
+        pygame.draw.circle(self.screen, COLOR_GOLD, (696, 356), 44, 3)
+        self.screen.blit(preview, (660, 320))
+        for b in self.avatar_buttons:
+            b.draw(self.screen)
+        self.avatar_path_input.draw(self.screen)
+        if self.avatar_toast:
+            t = get_font(15).render(self.avatar_toast, True, COLOR_GREEN)
+            self.screen.blit(t, (640, 492))
         for b in self.buttons:
             b.draw(self.screen)
 
@@ -1269,6 +1431,8 @@ class App:
             tag = self._t("host_tag") if j.get("host") else ""
             if j.get("bot"):
                 tag += self._t("bot_tag", l=self._t("lvl_" + str(j["bot"]))) + " "
+            av = gfx.avatar_surface(j.get("avatar") or self._avatar_payload(), 32)
+            self.screen.blit(av, (W // 2 - 246, 120 + i * 40 + 2))
             t = get_font(24).render(f"{i + 1}. {tag}{j['name']}", True, COLOR_TEXT)
             self.screen.blit(t, (W // 2 - 200, 120 + i * 40))
         cnt_y = 120 + max(len(joined), 1) * 40 + 8
@@ -1363,6 +1527,7 @@ class App:
             if i == v.get("sheriff"):
                 self.screen.blit(gfx.badge(20), (nx, py + 8))
                 nx += 24
+            self.screen.blit(gfx.avatar_surface(p.get("avatar"), 34), (x + pw - 42, py + 8))
             t = get_font(17).render(tag + p["name"], True, col)
             self.screen.blit(t, (nx, py + 6))
             yy = py + 30
@@ -1545,6 +1710,7 @@ class App:
             scores = v.get("scores") or []
             y = 130
             for i, r in enumerate(scores):
+                self.screen.blit(gfx.avatar_surface(r.get("avatar"), 40), (34, y - 2))
                 line = self._t("score_line", i=i + 1, name=r["name"], final=r["final"],
                                 g=r["value"] - r["gold"], gold=r["gold"], bonus=r["bonus"])
                 t = get_font(22).render(line, True, COLOR_TEXT)

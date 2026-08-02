@@ -206,13 +206,13 @@ def _exe_path():
     return None
 
 
-def _launch_bat(bat_path):
+def _launch_bat(bat_path, args=None):
     """Launch a .bat hidden and detached, so it survives this process."""
     flags = 0x08000000  # CREATE_NO_WINDOW
     flags |= getattr(subprocess, "DETACHED_PROCESS", 0)
     flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags,
-                     close_fds=True, shell=False)
+    subprocess.Popen(["cmd.exe", "/c", bat_path] + list(args or []),
+                     creationflags=flags, close_fds=True, shell=False)
     return True
 
 
@@ -244,33 +244,51 @@ def apply_update(installer_path, exe_path=None):
     bat = os.path.join(download_dir(), "run_update.bat")
     with io.open(flag, "w", encoding="ascii") as f:
         f.write("1")
+    # %1 = game exe, %2 = installer, %3 = pending flag
     lines = [
         "@echo off",
         "setlocal enabledelayedexpansion",
-        # give the game process a moment to fully exit and release the exe
-        "ping -n 5 127.0.0.1 >nul",
-        # retry the silent install a few times in case the exe is still locked
+        'set "EXE=%~1"',
+        'set "INST=%~2"',
+        'set "FLAG=%~3"',
+        # wait until the old game process fully exits (a PyInstaller onefile
+        # process keeps its own exe open while running, so the installer
+        # cannot replace it until the process is gone)
+        "set /a n=0",
+        ":wait_exit",
+        'tasklist /FI "IMAGENAME eq %~n1.exe" 2>nul | find /I "%~n1.exe" >nul',
+        "if errorlevel 1 goto exit_done",
+        "set /a n+=1",
+        "if !n! lss 40 ( ping -n 2 127.0.0.1 >nul & goto wait_exit )",
+        # give up waiting: force-kill so the installer can replace the exe
+        'taskkill /IM "%~n1.exe" /F >nul 2>&1',
+        ":exit_done",
+        # silent install, retry while the exe is still locked
         "set /a n=0",
         ":install",
-        '"{0}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART'.format(installer_path),
+        '"%INST%" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART',
         "if errorlevel 1 (",
         "  set /a n+=1",
         "  if !n! lss 3 ( ping -n 3 127.0.0.1 >nul & goto install )",
         ")",
-        # wait until the game exe is really there before launching it
-        "for /l %%i in (1,1,40) do (",
-        '  if exist "{0}" goto launch'.format(exe_path),
-        "  ping -n 1 127.0.0.1 >nul",
-        ")",
+        # launch the new game; if it dies within a few seconds (e.g. a
+        # boot-time temp-extraction race) retry a couple of times
+        "set /a n=0",
         ":launch",
-        'start "" "{0}"'.format(exe_path),
-        'del "{0}" >nul 2>&1'.format(installer_path),
-        'del "{0}" >nul 2>&1'.format(flag),
+        'if exist "%EXE%" start "" "%EXE%"',
+        "ping -n 3 127.0.0.1 >nul",
+        'tasklist /FI "IMAGENAME eq %~n1.exe" 2>nul | find /I "%~n1.exe" >nul',
+        "if errorlevel 1 (",
+        "  set /a n+=1",
+        "  if !n! lss 3 ( ping -n 2 127.0.0.1 >nul & goto launch )",
+        ")",
+        'del "%INST%" >nul 2>&1',
+        'del "%FLAG%" >nul 2>&1',
         "(goto) 2>nul & del \"%~f0\"",
     ]
-    with io.open(bat, "w", encoding="ascii", errors="replace") as f:
+    with io.open(bat, "w", encoding="ascii", errors="replace", newline="") as f:
         f.write("\r\n".join(lines) + "\r\n")
-    ok = _launch_bat(bat)
+    ok = _launch_bat(bat, [exe_path, installer_path, flag])
     if not ok:
         try:
             os.remove(flag)

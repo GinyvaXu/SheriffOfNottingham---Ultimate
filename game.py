@@ -143,8 +143,9 @@ def transfer(pay_from, pay_to, amount):
 
 
 class Player:
-    def __init__(self, name):
+    def __init__(self, name, avatar=None):
         self.name = name
+        self.avatar = avatar or {"kind": "builtin", "id": "pig"}
         self.gold = 50
         self.hand = []
         self.bag = []
@@ -159,6 +160,7 @@ class Player:
     def view_public(self):
         return {
             "name": self.name,
+            "avatar": self.avatar,
             "gold": self.gold,
             "hand_count": len(self.hand),
             "stand_legal": _counts(self.stand_legal),
@@ -529,7 +531,7 @@ class Game:
                 delivered.append(c)
             value = sum(c["value"] for c in delivered) + p.gold
             rows.append({
-                "seat": i, "name": p.name, "gold": p.gold, "value": value,
+                "seat": i, "name": p.name, "avatar": p.avatar, "gold": p.gold, "value": value,
                 "legal_total": len(p.stand_legal),
                 "contra_total": len(p.stand_contra),
                 "legal": legal_count, "contra": contra_count,

@@ -156,3 +156,169 @@ def title_logo(size=72):
                          border_radius=2)
         return s
     return _cache("title_logo", size, _draw)
+# ---------- Avatars ----------
+
+AVATAR_STYLE = {
+    # key: (background ring, head, accent)
+    "pig":     ((196, 108, 122), (244, 190, 198), (150, 60, 80)),
+    "chicken": ((206, 158, 62), (250, 224, 140), (206, 90, 40)),
+    "cat":     ((196, 118, 52), (248, 202, 138), (70, 45, 25)),
+    "fox":     ((188, 88, 52), (248, 190, 150), (90, 50, 30)),
+    "knight":  ((104, 114, 132), (176, 186, 200), (52, 62, 78)),
+    "merchant":((166, 122, 74), (238, 210, 168), (110, 72, 40)),
+    "wizard":  ((112, 88, 160), (200, 176, 240), (64, 46, 104)),
+    "captain": ((70, 104, 160), (196, 222, 250), (38, 66, 104)),
+}
+
+
+def set_avatar_style(key, bg, fg, accent):
+    """Reskin mod hook: recolor one builtin avatar."""
+    AVATAR_STYLE[key] = (tuple(bg), tuple(fg), tuple(accent))
+
+
+def _circle_crop(surf, size):
+    """Crop a square surface into a circle of the given size."""
+    if surf.get_width() != size or surf.get_height() != size:
+        surf = pygame.transform.smoothscale(surf, (size, size))
+    mask = pygame.Surface((size, size), pygame.SRCALPHA)
+    pygame.draw.circle(mask, (255, 255, 255, 255), (size // 2, size // 2), size // 2)
+    surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    return surf
+
+
+def _custom_avatar_surface(b64data, size):
+    def _draw():
+        try:
+            import base64 as _b64
+            import io as _io
+            raw = _b64.b64decode(b64data)
+            surf = pygame.image.load(_io.BytesIO(raw)).convert_alpha()
+            return _circle_crop(surf, size)
+        except Exception:  # noqa: BLE001 - fall back to a neutral face
+            return _builtin_avatar_surface("pig", size)
+    return _cache(("avatar_custom", b64data[:64]), size, _draw)
+
+
+def _face_base(size, bg, fg):
+    """Shared circular head: ring + face + eyes + mouth."""
+    s = pygame.Surface((size, size), pygame.SRCALPHA)
+    c = size // 2
+    r = size // 2
+    pygame.draw.circle(s, bg, (c, c), r)
+    pygame.draw.circle(s, fg, (c, c), r - max(2, size // 12))
+    eye_y = int(size * 0.42)
+    eye_r = max(2, size // 16)
+    for ex in (int(size * 0.38), int(size * 0.62)):
+        pygame.draw.circle(s, (40, 32, 28), (ex, eye_y), eye_r)
+        pygame.draw.circle(s, (255, 255, 255), (ex - eye_r // 3, eye_y - eye_r // 3),
+                           max(1, eye_r // 3))
+    pygame.draw.arc(s, (40, 32, 28),
+                    (int(size * 0.32), int(size * 0.52), int(size * 0.36), int(size * 0.28)),
+                    0.15, 3.0, max(1, size // 22))
+    return s
+
+
+def _builtin_avatar_surface(key, size):
+    def _draw():
+        bg, fg, accent = AVATAR_STYLE.get(key, AVATAR_STYLE["pig"])
+        s = _face_base(size, bg, fg)
+        c = size // 2
+        u = max(2, size // 12)
+        if key == "pig":
+            # big round snout
+            pygame.draw.ellipse(s, (232, 170, 180),
+                                (int(size * 0.32), int(size * 0.52),
+                                 int(size * 0.36), int(size * 0.26)))
+            for nx in (int(size * 0.42), int(size * 0.58)):
+                pygame.draw.circle(s, (120, 50, 66), (nx, int(size * 0.65)), u // 2)
+            for ex in (int(size * 0.24), int(size * 0.76)):
+                pygame.draw.polygon(s, accent,
+                                    [(ex, int(size * 0.20)), (ex - u, int(size * 0.02)),
+                                     (ex + u, int(size * 0.02))])
+        elif key == "chicken":
+            # red comb + orange beak
+            for dy in range(3):
+                pygame.draw.circle(s, (214, 70, 40),
+                                   (c, int(size * 0.10) + dy * int(size * 0.10)),
+                                   u)
+            pygame.draw.polygon(s, (240, 140, 50),
+                                [(int(size * 0.44), int(size * 0.56)),
+                                 (int(size * 0.56), int(size * 0.56)),
+                                 (c, int(size * 0.70))])
+        elif key == "cat":
+            for ex in (int(size * 0.24), int(size * 0.76)):
+                pygame.draw.polygon(s, accent,
+                                    [(ex, int(size * 0.22)), (ex - u * 2, -2),
+                                     (ex + u * 2, -2)])
+            for w in (-1, 1):
+                pygame.draw.line(s, (60, 40, 24),
+                                 (c + w * int(size * 0.30), int(size * 0.56)),
+                                 (c + w * int(size * 0.50), int(size * 0.60)), 1)
+                pygame.draw.line(s, (60, 40, 24),
+                                 (c + w * int(size * 0.30), int(size * 0.64)),
+                                 (c + w * int(size * 0.48), int(size * 0.72)), 1)
+        elif key == "fox":
+            for ex in (int(size * 0.22), int(size * 0.78)):
+                pygame.draw.polygon(s, accent,
+                                    [(ex, int(size * 0.24)), (ex - u * 2, -2),
+                                     (ex + u, int(size * 0.18))])
+            pygame.draw.ellipse(s, (252, 240, 226),
+                                (int(size * 0.30), int(size * 0.56),
+                                 int(size * 0.40), int(size * 0.22)))
+        elif key == "knight":
+            # steel helmet + plume
+            pygame.draw.ellipse(s, (150, 160, 175),
+                                (int(size * 0.14), int(size * 0.02),
+                                 int(size * 0.72), int(size * 0.50)))
+            pygame.draw.line(s, (70, 80, 96), (int(size * 0.30), int(size * 0.16)),
+                             (int(size * 0.70), int(size * 0.16)), u)
+            pygame.draw.polygon(s, accent,
+                                [(int(size * 0.70), int(size * 0.10)),
+                                 (int(size * 0.90), int(size * 0.02)),
+                                 (int(size * 0.86), int(size * 0.20))])
+        elif key == "merchant":
+            # wide-brim hat + mustache
+            pygame.draw.rect(s, accent, (int(size * 0.06), int(size * 0.14),
+                                         int(size * 0.88), u * 2), border_radius=u)
+            pygame.draw.rect(s, (90, 60, 34), (int(size * 0.26), int(size * 0.02),
+                                               int(size * 0.48), int(size * 0.18)),
+                             border_radius=u)
+            for w in (-1, 1):
+                pygame.draw.line(s, (90, 60, 34),
+                                 (c, int(size * 0.62)), (c + w * int(size * 0.22), int(size * 0.58)), 2)
+        elif key == "wizard":
+            # pointed hat + star + beard
+            pygame.draw.polygon(s, accent,
+                                [(int(size * 0.24), int(size * 0.20)),
+                                 (int(size * 0.76), int(size * 0.20)),
+                                 (c, -2)])
+            pts = _star_pts(c, int(size * 0.14), u, u // 2, points=5)
+            pygame.draw.polygon(s, (250, 220, 120), pts)
+            pygame.draw.ellipse(s, (235, 228, 255),
+                                (int(size * 0.30), int(size * 0.56),
+                                 int(size * 0.40), int(size * 0.24)))
+        elif key == "captain":
+            # white captain hat + beard
+            pygame.draw.rect(s, (240, 244, 250), (int(size * 0.10), int(size * 0.10),
+                                                  int(size * 0.80), u * 2), border_radius=u)
+            pygame.draw.rect(s, (240, 244, 250), (int(size * 0.28), int(size * 0.00),
+                                                  int(size * 0.44), int(size * 0.16)),
+                             border_radius=u)
+            pygame.draw.circle(s, accent, (c, int(size * 0.20)), u // 2)
+            pygame.draw.ellipse(s, (220, 228, 240),
+                                (int(size * 0.30), int(size * 0.58),
+                                 int(size * 0.40), int(size * 0.22)))
+        return s
+    return _cache(("avatar_builtin", key), size, _draw)
+
+
+def avatar_surface(avatar, size):
+    """Render an avatar dict (from profile.avatar_payload) at a square size."""
+    if not isinstance(avatar, dict):
+        avatar = {"kind": "builtin", "id": "pig"}
+    if avatar.get("kind") == "custom" and avatar.get("data"):
+        return _custom_avatar_surface(avatar["data"], size)
+    key = str(avatar.get("id") or "pig")
+    if key not in AVATAR_STYLE:
+        key = "pig"
+    return _builtin_avatar_surface(key, size)

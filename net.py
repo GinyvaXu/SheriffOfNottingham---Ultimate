@@ -10,6 +10,7 @@ import time
 
 import bot
 import game
+import profile
 
 DEFAULT_PORT = 5555
 BOT_DELAY = 0.5   # pause between autonomous bot actions so humans can follow
@@ -131,6 +132,7 @@ class GameServer:
             conn.close()
             return
         rules = self._norm_mods(msg.get("mods"))
+        avatar = profile.avatar_from_payload(msg.get("avatar"))
         name = str(msg.get("name", "")).strip()
         if not name:
             _send(conn, {"t": "error", "msg": "Name cannot be empty"})
@@ -149,7 +151,7 @@ class GameServer:
                     return
                 self.seats[seat] = {"name": name, "conn": conn, "reader": reader,
                                     "seat": seat, "game_seat": None,
-                                    "rules_mods": rules}
+                                    "rules_mods": rules, "avatar": avatar}
                 _send(conn, {"t": "welcome", "seat": seat, "name": name, "host": seat == 0})
                 self._broadcast_lobby()
             else:
@@ -166,6 +168,7 @@ class GameServer:
                 s["conn"] = conn
                 s["reader"] = reader
                 s["rules_mods"] = rules
+                s["avatar"] = avatar
                 self.game.players[s["game_seat"]].connected = True
                 _send(conn, {"t": "welcome", "seat": seat, "name": name, "host": seat == 0,
                              "reconnected": True})
@@ -243,7 +246,7 @@ class GameServer:
 
     def _broadcast_lobby(self):
         joined = [{"seat": i, "name": s["name"], "host": i == 0,
-                   "bot": s.get("bot")}
+                   "bot": s.get("bot"), "avatar": s.get("avatar")}
                   for i, s in enumerate(self.seats) if s is not None]
         host_mods = self.seats[0]["rules_mods"] if self.seats[0] else []
         players_mods = []
@@ -325,7 +328,8 @@ class GameServer:
         self._broadcast_lobby()
 
     def _start_game(self, joined, rounds=None):
-        players = [game.Player(self.seats[i]["name"]) for i in joined]
+        players = [game.Player(self.seats[i]["name"],
+                               avatar=self.seats[i].get("avatar")) for i in joined]
         self.game = game.Game(players, rng=self.rng, royal=self.royal,
                               black_market=self.black_market,
                               rounds_total=rounds or self.rounds_total)
@@ -426,7 +430,9 @@ class GameServer:
             return
         n = sum(1 for s in self.seats if s and s.get("bot") == level)
         self.seats[seat] = {"name": bot.bot_name(level, n + 1), "conn": None, "reader": None,
-                            "seat": seat, "game_seat": None, "bot": level}
+                            "seat": seat, "game_seat": None, "bot": level,
+                            "avatar": {"kind": "builtin",
+                                       "id": bot.bot_avatar(level, n + 1)}}
         self._broadcast_lobby()
 
     def _remove_bot(self, seat):
@@ -693,7 +699,7 @@ class GameServer:
 class GameClient:
     """Client: background reader thread + message queue; emits a disconnected event on drop."""
 
-    def __init__(self, host, port, name, rules=None):
+    def __init__(self, host, port, name, rules=None, avatar=None):
         self.name = name
         self.sock = socket.create_connection((host, port), timeout=10)
         self.sock.settimeout(None)
@@ -703,7 +709,9 @@ class GameClient:
         if rules is None:
             import mods  # local import avoids a net->mods->gui->net cycle
             rules = mods.rules_mods()
-        self.send({"t": "hello", "name": name, "mods": rules})
+        if avatar is None:
+            avatar = profile.avatar_payload(profile.load_profile())
+        self.send({"t": "hello", "name": name, "mods": rules, "avatar": avatar})
         self.thread = threading.Thread(target=self._read_loop, daemon=True)
         self.thread.start()
 

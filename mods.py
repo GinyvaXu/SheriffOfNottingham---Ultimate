@@ -140,6 +140,17 @@ class ModAPI:
         lang.TYPE_ZH[key] = name_zh
         return (old_en, name_en, name_zh)
 
+    def set_avatar_colors(self, key, bg, fg, accent):
+        """Reskin mod hook: recolor one builtin avatar.
+
+        key is a builtin avatar id (pig/chicken/cat/fox/knight/merchant/
+        wizard/captain); bg/fg/accent are (r,g,b) tuples used for the ring,
+        the head and the detail color. Client-side only, like api.rename.
+        """
+        import gfx  # local import keeps mods dependency-light
+        gfx.set_avatar_style(str(key), tuple(bg), tuple(fg), tuple(accent))
+        return (bg, fg, accent)
+
     def patch(self, module_name, attr, value):
         """Modify the game itself, e.g. api.patch("game", "HAND_SIZE", 7)."""
         mod = _MODULES.get(module_name)

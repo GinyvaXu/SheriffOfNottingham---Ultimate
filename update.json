@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
-  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.4.0/SheriffOfNottingham-Setup-1.4.0.exe",
-  "notes": "v1.4.0: Rule mods (gameplay-changing mods, category=rules) with server-side room check: every player in a room must install the same rule mods (id+version); the lobby shows each player mod status and offers one-click download & install of missing rule mods from the in-game market. Ships 2 example rule mods (Marathon Market, Spice Road) and a recommended rule-mod ideas list in the README."
+  "version": "1.4.1",
+  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.4.1/SheriffOfNottingham-Setup-1.4.1.exe",
+  "notes": "v1.4.1: player profiles + avatars (8 built-in, upload your own picture, auto-saved locally, visible to everyone online, themed avatar palettes for all 5 reskin mods); Mods/Market screens no longer truncate the list (Spice Road now shows); restart-game button appears after enabling/installing mods; update-restart fixed (single CRLF batch file + wait for old process to exit)."
 }

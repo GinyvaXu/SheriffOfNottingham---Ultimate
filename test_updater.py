@@ -205,8 +205,28 @@ class ApplyTest(unittest.TestCase):
                 with open(bat, encoding="ascii", errors="replace") as f:
                     content = f.read()
                 self.assertIn("VERYSILENT", content)
-                self.assertIn(exe, content)
+                self.assertIn("%~1", content)  # exe is passed as %1 arg
                 launch.assert_called_once()
+                args = launch.call_args[0]
+                # args = (bat, [exe, installer, flag])
+                self.assertEqual(args[1][0], exe)
+                self.assertEqual(args[1][1], inst)
+
+    def test_apply_update_bat_has_single_crlf(self):
+        """Regression: bat must use \r\n, not \r\r\n (text-mode newline doubling)."""
+        exe = r"C:\Games\SheriffOfNottingham.exe"
+        with mock.patch.object(updater, "_launch_bat", return_value=True):
+            with tempfile.TemporaryDirectory() as d:
+                inst = os.path.join(d, "Setup.exe")
+                with open(inst, "wb") as f:
+                    f.write(b"x")
+                self.assertTrue(updater.apply_update(inst, exe_path=exe))
+                bat = os.path.join(updater.download_dir(), "run_update.bat")
+                with open(bat, "rb") as f:
+                    raw = f.read()
+        self.assertNotIn(b"\r\r\n", raw)
+        self.assertTrue(raw.startswith(b"@echo off\r\n"))
+        self.assertEqual(raw.count(b"\r\n"), raw.count(b"\n"))
 
     def test_apply_update_guard_flag(self):
         """A second apply_update while one is pending must not double-schedule."""

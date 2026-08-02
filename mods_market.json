@@ -4,15 +4,15 @@
     {
       "id": "cyberpunk",
       "folder": "cyberpunk_mod",
-      "version": "1.3.2",
+      "version": "1.4.1",
       "category": "reskin",
       "name": {
         "en": "Cyberpunk Overlay",
         "zh": "赛博朋克换皮"
       },
       "description": {
-        "en": "Neon reskin with iconic cyberpunk goods: rail-guns, neuro-stims, night-brew and memory silk. Client-side only.",
-        "zh": "霓虹赛博风格：磁轨枪、神经兴奋剂、夜酿与记忆丝绸等未来都市货物。仅客户端生效。"
+        "en": "Neon reskin with iconic cyberpunk goods: rail-guns, neuro-stims, night-brew and memory silk. Client-side only. Includes themed avatars matching the reskin.",
+        "zh": "霓虹赛博风格：磁轨枪、神经兴奋剂、夜酿与记忆丝绸等未来都市货物。仅客户端生效。附带配套主题头像。"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/cyberpunk_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/cyberpunk_mod.zip"
@@ -20,15 +20,15 @@
     {
       "id": "medieval",
       "folder": "medieval_mod",
-      "version": "1.3.2",
+      "version": "1.4.1",
       "category": "reskin",
       "name": {
         "en": "Medieval England",
         "zh": "中世纪英格兰"
       },
       "description": {
-        "en": "Medieval reskin with period goods: fattened capons, monastery cheese, oat loaves and monks' mead. Client-side only.",
-        "zh": "中世纪换皮：肥育阉鸡、修道院奶酪、燕麦面包与修士蜜酒等时代货物。仅客户端生效。"
+        "en": "Medieval reskin with period goods: fattened capons, monastery cheese, oat loaves and monks' mead. Client-side only. Includes themed avatars matching the reskin.",
+        "zh": "中世纪换皮：肥育阉鸡、修道院奶酪、燕麦面包与修士蜜酒等时代货物。仅客户端生效。附带配套主题头像。"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/medieval_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/medieval_mod.zip"
@@ -36,15 +36,15 @@
     {
       "id": "starlight",
       "folder": "starlight_mod",
-      "version": "1.3.2",
+      "version": "1.4.1",
       "category": "reskin",
       "name": {
         "en": "Starlight Colony",
         "zh": "星光殖民地"
       },
       "description": {
-        "en": "Space-faring reskin with colony goods: hydroponic fruit, protein slabs, plasma rifles and nebula wine. Client-side only.",
-        "zh": "星际殖民换皮：水培果、蛋白块、等离子步枪与星云酒等殖民地货物。仅客户端生效。"
+        "en": "Space-faring reskin with colony goods: hydroponic fruit, protein slabs, plasma rifles and nebula wine. Client-side only. Includes themed avatars matching the reskin.",
+        "zh": "星际殖民换皮：水培果、蛋白块、等离子步枪与星云酒等殖民地货物。仅客户端生效。附带配套主题头像。"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/starlight_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/starlight_mod.zip"
@@ -52,15 +52,15 @@
     {
       "id": "steampunk",
       "folder": "steampunk_mod",
-      "version": "1.3.2",
+      "version": "1.4.1",
       "category": "reskin",
       "name": {
         "en": "Steamforge City",
         "zh": "蒸汽锻炉城"
       },
       "description": {
-        "en": "Steampunk reskin with brass-age goods: clockwork fowl, cog-cheese, steam rifles and coal whiskey. Client-side only.",
-        "zh": "蒸汽朋克换皮：发条禽、齿轮奶酪、蒸汽步枪与煤烟威士忌等黄铜时代货物。仅客户端生效。"
+        "en": "Steampunk reskin with brass-age goods: clockwork fowl, cog-cheese, steam rifles and coal whiskey. Client-side only. Includes themed avatars matching the reskin.",
+        "zh": "蒸汽朋克换皮：发条禽、齿轮奶酪、蒸汽步枪与煤烟威士忌等黄铜时代货物。仅客户端生效。附带配套主题头像。"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/steampunk_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/steampunk_mod.zip"
@@ -68,15 +68,15 @@
     {
       "id": "arcane",
       "folder": "arcane_mod",
-      "version": "1.3.2",
+      "version": "1.4.1",
       "category": "reskin",
       "name": {
         "en": "Arcane Realms",
         "zh": "奥术秘境"
       },
       "description": {
-        "en": "Fantasy reskin with arcane goods: fey fruit, familiar hens, arcane staves and elven wine. Client-side only.",
-        "zh": "魔法世界观换皮：仙灵果、使魔母鸡、奥术法杖与精灵酒等秘法货物。仅客户端生效。"
+        "en": "Fantasy reskin with arcane goods: fey fruit, familiar hens, arcane staves and elven wine. Client-side only. Includes themed avatars matching the reskin.",
+        "zh": "魔法世界观换皮：仙灵果、使魔母鸡、奥术法杖与精灵酒等秘法货物。仅客户端生效。附带配套主题头像。"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/arcane_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/arcane_mod.zip"

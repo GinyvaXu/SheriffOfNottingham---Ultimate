@@ -18,6 +18,19 @@ def bot_name(level, num=None):
     return base if num is None else f"{base} {num}"
 
 
+_LEVEL_AVATARS = {
+    "easy": ("pig", "chicken", "cat"),
+    "normal": ("fox", "merchant", "wizard"),
+    "hard": ("knight", "captain", "fox"),
+}
+
+
+def bot_avatar(level, num=1):
+    """Deterministic builtin avatar per level+number so bots stay distinct."""
+    pool = _LEVEL_AVATARS.get(level, ("pig", "chicken", "cat"))
+    return pool[(num - 1) % len(pool)]
+
+
 def _public_smuggle(p):
     """Public contraband count (royal cards are public and excluded)."""
     return sum(1 for c in p.stand_contra if not c.get("royal"))

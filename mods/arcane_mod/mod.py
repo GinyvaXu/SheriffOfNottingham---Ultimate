@@ -91,6 +91,18 @@ _UI_ZH = {
 }
 
 
+
+_AVATARS = {
+    'pig': ((225, 120, 155), (255, 195, 215), (150, 50, 90)),
+    'chicken': ((240, 195, 85), (255, 235, 150), (190, 110, 30)),
+    'cat': ((155, 120, 220), (205, 180, 250), (80, 50, 140)),
+    'fox': ((225, 135, 60), (255, 205, 150), (130, 60, 20)),
+    'knight': ((100, 115, 150), (175, 190, 220), (50, 65, 100)),
+    'merchant': ((165, 130, 90), (235, 210, 170), (110, 75, 40)),
+    'wizard': ((105, 75, 175), (195, 170, 245), (60, 40, 110)),
+    'captain': ((75, 105, 165), (195, 220, 250), (40, 65, 110)),
+}
+
 def register(api):
     for key in _NAMES_EN:
         api.rename(key, _NAMES_EN[key], _NAMES_ZH[key])
@@ -110,3 +122,6 @@ def register(api):
     ui["en"].update(_UI_EN)
     ui["zh"].update(_UI_ZH)
     api.patch("lang", "UI", ui)
+    for key, (bg, fg, acc) in _AVATARS.items():
+        api.set_avatar_colors(key, bg, fg, acc)
+

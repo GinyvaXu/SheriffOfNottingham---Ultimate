@@ -12,6 +12,7 @@ v1.2.2 fixes **mod enable/disable save failures** (UTF-8 BOM manifests and read-
 v1.2.3 fixes **"mod.json not writable" after installing under Program Files**: the installer grants write permission on the mods folder, the game self-repairs folder ACLs (icacls) on demand, and automatically falls back to a per-user mods folder under %APPDATA% (with migration) when the install folder is still not writable. The Mods screen now shows the actual mods folder path.
 v1.3.0 adds an in-game **Mods Market** (browse the GitHub-hosted catalog, one-click download & install), ships **5 text-only reskin mods** (cyberpunk / medieval / starlight / steampunk / arcane), and makes server **chat messages follow the local reskin** ? reskins are client-side only, so each player online sees their own version.
 v1.4.0 adds **rule mods** (gameplay-changing mods) with a **server-side room check**: everyone in a room must have the same rule mods installed (id + version), the lobby shows each player's mod status and offers **one-click download & install** of missing rule mods. Ships two example rule mods (**Marathon Market**, **Spice Road**).
+v1.4.1 adds **player profiles & avatars**: your name + avatar are saved in `%APPDATA%/SheriffOfNottingham/profile.json` and restored on every launch; pick one of **8 built-in avatars** or **upload your own picture** (auto-downscaled and shared with everyone in the room); avatars appear in the menu, lobby, player panels and results screen. The **5 reskin mods now include themed avatar palettes** matching their world. Also: the **Mods/Market screens list every mod** (Spice Road is no longer hidden), a **Restart Game** button appears after enabling or installing mods, and the **update-restart flow is fixed** (single-CRLF batch file, waits for the old process to fully exit). New gameplay-mod ideas are detailed in **MOD_IDEAS.md** for review.
 
 ## Files
 
@@ -22,6 +23,7 @@ net.py       TCP server + JSON protocol + disconnect/reconnect + bot driver
 gui.py       pygame button-only UI
 gfx.py       Procedural decorative graphics (badge, coin, card back, icon)
 mods.py      Mod loader (mods/ folder next to the exe, ModAPI for add/patch/rename)
+profile.py   Local player profile (name + avatar, %APPDATA%/SheriffOfNottingham/profile.json)
 lang.py      Bilingual strings (zh/en) + card-name rebuild + reskin renames
 market.py    Mod market: remote catalog + one-click download & install
 mods_market.json  Mod market catalog (raw + jsDelivr CDN)
@@ -34,6 +36,8 @@ test_ai_bots.py  Test for in-lobby AI bots (host adds bots, plays a full game)
 test_new_rules.py  Unit tests for royal goods & black market modules
 test_mods.py Mod loader unit tests (register/patch/enable/disable/errors)
 test_reskin_mods.py  Reskin mod + market install tests
+test_avatars.py  Profile/avatar save-load + online avatar sync tests
+MOD_IDEAS.md  Bilingual gameplay-mod idea proposals (for review)
 mods/        Built-in mod folder (README.md + example_mod + cyberpunk_mod, disabled by default)
 ```
 
