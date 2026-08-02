@@ -215,8 +215,11 @@ def _launch_bat(bat_path, args=None):
     Returns the Popen handle (for pid tracking) or None when the batch
     could not be started at all.
     """
+    # CREATE_NO_WINDOW runs cmd hidden (no console). DETACHED_PROCESS must NOT
+    # be combined with it: per CreateProcess docs CREATE_NO_WINDOW is ignored
+    # when DETACHED_PROCESS is used, which lets console children pop up
+    # visible windows. CREATE_NEW_PROCESS_GROUP keeps Ctrl+C isolated.
     flags = 0x08000000  # CREATE_NO_WINDOW
-    flags |= getattr(subprocess, "DETACHED_PROCESS", 0)
     flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     try:
         return subprocess.Popen(["cmd.exe", "/c", bat_path] + list(args or []),
@@ -315,57 +318,62 @@ def apply_update(installer_path, exe_path=None):
         f.write("pid=0\nts=%d\n" % int(time.time()))
     # %1 = game exe, %2 = installer, %3 = pending flag
     lines = [
-        "@echo off",
-        "setlocal enabledelayedexpansion",
+        '@echo off',
+        'setlocal enabledelayedexpansion',
         'set "EXE=%~1"',
         'set "INST=%~2"',
         'set "FLAG=%~3"',
         'set "LOG=%~dp0update.log"',
         'set "INNO=%~dp0inno_install.log"',
+        'set "NAME=%~n1"',
         'echo [%date% %time%] batch started >> "%LOG%"',
-        # wait until the old game process fully exits (a PyInstaller onefile
-        # process keeps its own exe open while running, so the installer
-        # cannot replace it until the process is gone)
-        "set /a n=0",
-        ":wait_exit",
-        'tasklist /FI "IMAGENAME eq %~n1.exe" 2>nul | find /I "%~n1.exe" >nul',
-        "if errorlevel 1 goto exit_done",
-        "set /a n+=1",
-        "if !n! lss 20 ( ping -n 2 127.0.0.1 >nul & goto wait_exit )",
-        # give up waiting: force-kill so the installer can replace the exe
+        'rem wait until the old game process fully exits (a PyInstaller onefile',
+        'rem process keeps its own exe open while running, so the installer',
+        'rem cannot replace it until the process is gone)',
+        'rem NOTE: hidden PowerShell is used instead of tasklist/find: console',
+        'rem tools spawned from a hidden cmd allocate visible console windows,',
+        'rem and find can block forever on an open pipe. -WindowStyle Hidden',
+        'rem shows no window and never reads stdin.',
+        'set /a n=0',
+        ':wait_exit',
+        'powershell -NoProfile -WindowStyle Hidden -Command "if (Get-Process -Name \'%NAME%\' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"',
+        'if errorlevel 1 goto exit_done',
+        'set /a n+=1',
+        'if !n! lss 20 ( powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2" & goto wait_exit )',
+        'rem give up waiting: force-kill so the installer can replace the exe',
         'echo [%date% %time%] game did not exit, forcing kill >> "%LOG%"',
-        'taskkill /IM "%~n1.exe" /F >nul 2>&1',
-        "ping -n 2 127.0.0.1 >nul",
-        ":exit_done",
-        # silent install, retry while the exe is still locked
-        "set /a n=0",
-        ":install",
+        'powershell -NoProfile -WindowStyle Hidden -Command "Stop-Process -Name \'%NAME%\' -Force -ErrorAction SilentlyContinue"',
+        'powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2"',
+        ':exit_done',
+        'rem silent install, retry while the exe is still locked',
+        'set /a n=0',
+        ':install',
         'echo [%date% %time%] running installer >> "%LOG%"',
         '"%INST%" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="%INNO%"',
-        "set ec=!errorlevel!",
+        'set ec=!errorlevel!',
         'echo [%date% %time%] installer exit code=!ec! >> "%LOG%"',
-        "if !ec! neq 0 (",
-        "  set /a n+=1",
-        "  if !n! lss 3 ( ping -n 3 127.0.0.1 >nul & goto install )",
+        'if !ec! neq 0 (',
+        '  set /a n+=1',
+        '  if !n! lss 3 ( powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3" & goto install )',
         '  echo [%date% %time%] install failed after retries, opening releases page >> "%LOG%"',
         '  start "" "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases"',
-        ")",
-        # launch the new game; if it dies within a few seconds (e.g. a
-        # boot-time temp-extraction race) retry a couple of times
-        "set /a n=0",
-        ":launch",
+        ')',
+        'rem launch the new game; if it dies within a few seconds (e.g. a',
+        'rem boot-time temp-extraction race) retry a couple of times',
+        'set /a n=0',
+        ':launch',
         'if exist "%EXE%" start "" "%EXE%"',
-        "ping -n 3 127.0.0.1 >nul",
-        'tasklist /FI "IMAGENAME eq %~n1.exe" 2>nul | find /I "%~n1.exe" >nul',
-        "if errorlevel 1 (",
-        "  set /a n+=1",
-        "  if !n! lss 3 ( ping -n 2 127.0.0.1 >nul & goto launch )",
+        'powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3"',
+        'powershell -NoProfile -WindowStyle Hidden -Command "if (Get-Process -Name \'%NAME%\' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"',
+        'if errorlevel 1 (',
+        '  set /a n+=1',
+        '  if !n! lss 3 ( goto launch )',
         '  echo [%date% %time%] could not relaunch game >> "%LOG%"',
-        ")",
+        ')',
         'echo [%date% %time%] batch finished >> "%LOG%"',
         'del "%INST%" >nul 2>&1',
         'del "%FLAG%" >nul 2>&1',
-        "(goto) 2>nul & del \"%~f0\"",
+        '(goto) 2>nul & del "%~f0"',
     ]
     with io.open(bat, "w", encoding="ascii", errors="replace", newline="") as f:
         f.write("\r\n".join(lines) + "\r\n")

@@ -223,6 +223,29 @@ class ApplyTest(unittest.TestCase):
                     flag_text = f.read()
                 self.assertIn("pid=12345", flag_text)
 
+    def test_apply_update_bat_uses_hidden_powershell(self):
+        """Regression: the update batch must not spawn console tools that pop
+        visible windows or hang (the old 'tasklist | find' stuck forever)."""
+        exe = r"C:\Games\SheriffOfNottingham.exe"
+        with mock.patch.object(updater, "_launch_bat", return_value=_FakeProc()):
+            with tempfile.TemporaryDirectory() as d:
+                inst = os.path.join(d, "Setup.exe")
+                with open(inst, "wb") as f:
+                    f.write(b"x")
+                self.assertTrue(updater.apply_update(inst, exe_path=exe))
+                bat = os.path.join(updater.download_dir(), "run_update.bat")
+                with open(bat, encoding="ascii", errors="replace") as f:
+                    content = f.read()
+        low = content.lower()
+        self.assertNotIn("tasklist /fi", low)
+        self.assertNotIn("| find", low)
+        self.assertNotIn("ping -n", low)
+        self.assertIn("powershell -noprofile -windowstyle hidden", low)
+        self.assertIn("get-process", low)      # process-exists check
+        self.assertIn("stop-process", low)     # force-kill fallback
+        self.assertIn("start-sleep", low)      # delays (no ping)
+        self.assertIn("VERYSILENT", content)
+
     def test_apply_update_bat_has_single_crlf(self):
         """Regression: bat must use \r\n, not \r\r\n (text-mode newline doubling)."""
         exe = r"C:\Games\SheriffOfNottingham.exe"
