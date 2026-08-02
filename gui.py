@@ -839,12 +839,19 @@ class App:
         self._update_ui_dirty = True
         threading.Thread(target=self._thread_check, daemon=True).start()
 
+    def _error_text(self, code, detail=""):
+        if code == "timeout":
+            return self._t("update_err_timeout")
+        if code == "network":
+            return self._t("update_err_network")
+        return self._t("update_error", e=detail or code)
+
     def _thread_check(self):
         info = updater.check_for_update()
         self.update_info = info
         if info.get("error"):
             self.update_state = "error"
-            self.update_error = info["error"]
+            self.update_error = self._error_text(info["error"], info.get("detail", ""))
         elif info.get("available"):
             self.update_state = "available"
             self.update_banner = self._t("update_banner", ver=info["version"])
@@ -878,7 +885,7 @@ class App:
             self.update_state = "downloaded"
         except Exception as e:  # noqa: BLE001
             self.update_state = "error"
-            self.update_error = str(e)
+            self.update_error = self._error_text(updater.error_code(e), str(e))
         self._update_ui_dirty = True
 
     def _install_update(self):

@@ -1,5 +1,5 @@
 {
-  "version": "1.2.1",
-  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.2.1/SheriffOfNottingham-Setup-1.2.1.exe",
-  "notes": "v1.2.1: Added automatic update checking and one-click update install."
+  "version": "1.2.2",
+  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.2.2/SheriffOfNottingham-Setup-1.2.2.exe",
+  "notes": "v1.2.2: Fix mod enable/disable save failure (BOM mod.json, read-only file) and update-check timeouts (multi-source + friendly errors)."
 }

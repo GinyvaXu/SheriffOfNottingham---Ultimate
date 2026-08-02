@@ -7,6 +7,7 @@ import json
 import os
 import random
 import shutil
+import sys
 import tempfile
 
 import game
@@ -123,6 +124,33 @@ def register(api):
         ok, err = g2.do_declare(seat, "PEAR")
         assert ok, err
         print("PASS declare mod legal type")
+        # ---- regression: toggle enabled on a BOM-prefixed mod.json ----
+        bom_folder = os.path.join(base, "bom_mod")
+        os.makedirs(bom_folder, exist_ok=True)
+        bom_path = os.path.join(bom_folder, "mod.json")
+        with open(bom_path, "w", encoding="utf-8-sig") as f:  # writes a UTF-8 BOM
+            json.dump({"id": "bom_mod", "name": "Bom Mod", "version": "0.1.0",
+                       "enabled": False}, f)
+        assert mods.set_enabled("bom_mod", True), "toggle on with BOM mod.json failed"
+        with open(bom_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["enabled"] is True
+        assert mods.set_enabled("bom_mod", False), "toggle off with BOM mod.json failed"
+        print("PASS toggle enabled with BOM mod.json")
+
+        # ---- regression: read-only mod.json is made writable before saving ----
+        ro_folder = os.path.join(base, "ro_mod")
+        os.makedirs(ro_folder, exist_ok=True)
+        ro_path = os.path.join(ro_folder, "mod.json")
+        with open(ro_path, "w", encoding="utf-8") as f:
+            json.dump({"id": "ro_mod", "name": "Ro Mod", "version": "0.1.0",
+                       "enabled": False}, f)
+        if sys.platform.startswith("win"):
+            os.chmod(ro_path, 0o444)  # set the read-only attribute
+        assert mods.set_enabled("ro_mod", True), "toggle read-only mod.json failed"
+        with open(ro_path, encoding="utf-8") as f:
+            assert json.load(f)["enabled"] is True
+        print("PASS toggle read-only mod.json")
+
     finally:
         _restore(snap)
         if old_env is None:

@@ -5,43 +5,57 @@ The repo root holds a small JSON manifest ``update.json`` describing the
 latest published release::
 
     {
-      "version": "1.2.1",
-      "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.2.1/SheriffOfNottingham-Setup-1.2.1.exe",
+      "version": "1.2.2",
+      "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.2.2/SheriffOfNottingham-Setup-1.2.2.exe",
       "notes": "..."
     }
 
-``check_for_update()`` fetches this manifest from raw.githubusercontent.com
-and compares versions. In frozen (exe) builds the player can download the new
-installer and silently reinstall: the game exits, a small .bat in %TEMP%
-waits for the process to release the exe, runs the installer (which keeps the
-previous install folder because the AppId matches), relaunches the game and
-cleans up after itself.
+``check_for_update()`` tries several sources in order (raw.githubusercontent,
+the jsDelivr CDN mirror, then the GitHub releases API) so that slow or
+blocked networks do not break the check, and returns a friendly error code
+("timeout" / "network" / "unknown") instead of a raw exception string.
+
+In frozen (exe) builds the player can download the new installer and
+silently reinstall: the game exits, a small .bat in %TEMP% waits for the
+process to release the exe, runs the installer (which keeps the previous
+install folder because the AppId matches), relaunches the game and cleans
+up after itself.
 """
 
 import io
 import json
 import os
 import re
+import socket
+import ssl
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 
 import version
 
-MANIFEST_URL = ("https://raw.githubusercontent.com/GinyvaXu/"
-                "SheriffOfNottingham---Ultimate/main/update.json")
+MANIFEST_SOURCES = [
+    ("raw", "https://raw.githubusercontent.com/GinyvaXu/"
+            "SheriffOfNottingham---Ultimate/main/update.json"),
+    ("cdn", "https://cdn.jsdelivr.net/gh/GinyvaXu/"
+            "SheriffOfNottingham---Ultimate@main/update.json"),
+    ("api", "https://api.github.com/repos/GinyvaXu/"
+            "SheriffOfNottingham---Ultimate/releases/latest"),
+]
 RELEASE_PAGE_URL = ("https://github.com/GinyvaXu/"
                     "SheriffOfNottingham---Ultimate/releases")
 _UA = "SheriffOfNottingham-Updater/1.0"
-_DEFAULT_TIMEOUT = 8
+_DEFAULT_TIMEOUT = 12
 _DOWNLOAD_TIMEOUT = 60
+_DOWNLOAD_ATTEMPTS = 2
 
 
 # ---------- version helpers ----------
 
 def parse_version(s):
-    """'1.2.1' -> (1, 2, 1). Handles dirty suffixes like '1.2.1-rc1'."""
+    """'1.2.2' -> (1, 2, 2). Handles dirty suffixes like '1.2.2-rc1'."""
     parts = re.findall(r"\d+", str(s))[:3]
     return tuple(int(x) for x in (parts + ["0", "0", "0"])[:3])
 
@@ -57,37 +71,79 @@ def is_frozen():
 # ---------- network ----------
 
 def _fetch(url, timeout):
-    req = urllib.request.Request(url, headers={"User-Agent": _UA})
+    req = urllib.request.Request(url, headers={"User-Agent": _UA,
+                                               "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
 
 
-def fetch_manifest(url=MANIFEST_URL, timeout=_DEFAULT_TIMEOUT):
+def error_code(e):
+    """Map an exception to a friendly code: 'timeout' | 'network' | 'unknown'."""
+    if isinstance(e, (TimeoutError, socket.timeout)):
+        return "timeout"
+    if isinstance(e, urllib.error.URLError):
+        reason = getattr(e, "reason", None)
+        if isinstance(reason, (TimeoutError, socket.timeout)):
+            return "timeout"
+        return "network"
+    if isinstance(e, (ssl.SSLError, socket.gaierror, OSError)):
+        return "network"
+    return "unknown"
+
+
+def fetch_manifest(url, timeout=_DEFAULT_TIMEOUT):
     """Download and parse update.json. Raises on any network/json problem."""
     data = _fetch(url, timeout)
     return json.loads(data.decode("utf-8"))
 
 
-def check_for_update(url=MANIFEST_URL, timeout=_DEFAULT_TIMEOUT):
+def _from_release_api(data):
+    """Turn a GitHub releases/latest API response into (version, url, notes)."""
+    tag = str(data.get("tag_name", "") or "").strip().lstrip("vV")
+    if not tag:
+        raise ValueError("empty tag")
+    url = ""
+    for a in (data.get("assets") or []):
+        u = str(a.get("browser_download_url", "") or "")
+        if u.lower().endswith(".exe"):
+            url = u
+            break
+    if not url:
+        raise ValueError("no installer asset")
+    notes = str(data.get("body", "") or "")[:400]
+    return tag, url, notes
+
+
+def check_for_update(timeout=_DEFAULT_TIMEOUT):
     """Return a status dict, never raises.
 
-    Keys: available, version, current, url, notes, error.
+    Keys: available, version, current, url, notes, error, detail.
+    ``error`` is None on success or one of "timeout" / "network" / "unknown".
     """
     current = version.__version__
-    try:
-        man = fetch_manifest(url, timeout)
-        latest = str(man.get("version", "") or "").strip()
-        if not latest:
-            return {"available": False, "version": "", "current": current,
-                    "url": "", "notes": "", "error": "empty manifest"}
-        return {"available": is_newer(latest, current),
-                "version": latest, "current": current,
-                "url": str(man.get("url", "") or ""),
-                "notes": str(man.get("notes", "") or ""),
-                "error": None}
-    except Exception as e:  # noqa: BLE001 - never crash the UI thread
-        return {"available": False, "version": "", "current": current,
-                "url": "", "notes": "", "error": str(e)}
+    last_err = None
+    for kind, url in MANIFEST_SOURCES:
+        try:
+            if kind == "api":
+                data = _fetch(url, timeout)
+                latest, dl_url, notes = _from_release_api(json.loads(data.decode("utf-8")))
+            else:
+                man = fetch_manifest(url, timeout)
+                latest = str(man.get("version", "") or "").strip()
+                if not latest:
+                    raise ValueError("empty manifest")
+                dl_url = str(man.get("url", "") or "")
+                notes = str(man.get("notes", "") or "")
+            return {"available": is_newer(latest, current),
+                    "version": latest, "current": current,
+                    "url": dl_url, "notes": notes, "error": None,
+                    "detail": ""}
+        except Exception as e:  # noqa: BLE001 - never crash the UI thread
+            last_err = e
+            continue
+    return {"available": False, "version": "", "current": current,
+            "url": "", "notes": "", "error": error_code(last_err),
+            "detail": str(last_err) if last_err else ""}
 
 
 def download_dir():
@@ -99,15 +155,7 @@ def download_dir():
     return d
 
 
-def download_installer(url, dest_dir=None, progress=None, timeout=_DOWNLOAD_TIMEOUT):
-    """Download the installer to a temp folder; returns the local path.
-
-    ``progress`` is called as progress(got_bytes, total_bytes) when known.
-    """
-    dest_dir = dest_dir or download_dir()
-    os.makedirs(dest_dir, exist_ok=True)
-    fname = os.path.basename(url.split("?")[0]) or "SheriffOfNottingham-Setup.exe"
-    path = os.path.join(dest_dir, fname)
+def _download_once(url, path, timeout, progress):
     req = urllib.request.Request(url, headers={"User-Agent": _UA})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         total = int(r.headers.get("Content-Length") or 0)
@@ -121,7 +169,32 @@ def download_installer(url, dest_dir=None, progress=None, timeout=_DOWNLOAD_TIME
                 got += len(chunk)
                 if progress:
                     progress(got, total)
-    return path
+
+
+def download_installer(url, dest_dir=None, progress=None, timeout=_DOWNLOAD_TIMEOUT,
+                       attempts=_DOWNLOAD_ATTEMPTS):
+    """Download the installer to a temp folder; returns the local path.
+
+    ``progress`` is called as progress(got_bytes, total_bytes) when known.
+    Retries ``attempts`` times; the last exception propagates to the caller.
+    """
+    dest_dir = dest_dir or download_dir()
+    os.makedirs(dest_dir, exist_ok=True)
+    fname = os.path.basename(url.split("?")[0]) or "SheriffOfNottingham-Setup.exe"
+    path = os.path.join(dest_dir, fname)
+    last_err = None
+    for attempt in range(max(1, attempts)):
+        try:
+            _download_once(url, path, timeout, progress)
+            return path
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError:
+                pass
+    raise last_err
 
 
 # ---------- apply / relaunch ----------

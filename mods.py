@@ -160,7 +160,7 @@ def discover_mods(base=None):
         if not os.path.isfile(mpath):
             continue
         try:
-            with io.open(mpath, encoding="utf-8") as f:
+            with io.open(mpath, encoding="utf-8-sig") as f:
                 manifest = json.load(f)
         except Exception:
             continue
@@ -195,7 +195,7 @@ def list_all_mods(base=None):
         if not os.path.isfile(mpath):
             continue
         try:
-            with io.open(mpath, encoding="utf-8") as f:
+            with io.open(mpath, encoding="utf-8-sig") as f:
                 manifest = json.load(f)
         except Exception:
             manifest = {}
@@ -212,6 +212,24 @@ def list_all_mods(base=None):
     return out
 
 
+def _write_json(path, data):
+    """Write JSON, tolerating a read-only file attribute (clears it)."""
+    try:
+        with io.open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except (PermissionError, OSError):
+        try:
+            import stat as statmod
+            st = os.stat(path)
+            os.chmod(path, st.st_mode | statmod.S_IWRITE)
+            with io.open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception:
+            return False
+
+
 def set_enabled(mod_id, enabled, base=None):
     """Persist the enabled flag in the mod's mod.json. Returns True on success."""
     base = base or mods_base()
@@ -220,14 +238,12 @@ def set_enabled(mod_id, enabled, base=None):
             continue
         mpath = os.path.join(info["folder"], "mod.json")
         try:
-            with io.open(mpath, encoding="utf-8") as f:
+            with io.open(mpath, encoding="utf-8-sig") as f:
                 manifest = json.load(f)
             if not isinstance(manifest, dict):
                 manifest = {}
             manifest["enabled"] = bool(enabled)
-            with io.open(mpath, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, ensure_ascii=False, indent=2)
-            return True
+            return _write_json(mpath, manifest)
         except Exception:
             return False
     return False
