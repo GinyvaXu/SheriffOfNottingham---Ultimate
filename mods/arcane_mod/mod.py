@@ -27,24 +27,23 @@ _NAMES_EN = {
 }
 
 _NAMES_ZH = {
-    'APPLE': '仙灵果',
-    'BLACK_MARKET': '暗影集市',
-    'BREAD': '附魔面包',
-    'CHEESE': '月光奶酪',
-    'CHICKEN': '使魔母鸡',
-    'COFFEE': '女巫煮剂',
-    'CROSSBOW': '奥术法杖',
-    'ROYAL_BLUE_CHEESE': '星界蓝纹',
-    'ROYAL_CHICKEN': '凤凰禽',
-    'ROYAL_COARSE_BREAD': '巨人面包',
-    'ROYAL_GOLD_APPLE': '黄金仙灵果',
-    'ROYAL_GOUDA_CHEESE': '大法师奶酪',
-    'ROYAL_GREEN_APPLE': '龙鳞果',
-    'ROYAL_RYE_BREAD': '矮人黑麦',
-    'SILK': '妖精丝绸',
-    'WINE': '精灵酒',
+    'APPLE': '???',
+    'BLACK_MARKET': '????',
+    'BREAD': '????',
+    'CHEESE': '????',
+    'CHICKEN': '????',
+    'COFFEE': '????',
+    'CROSSBOW': '????',
+    'ROYAL_BLUE_CHEESE': '????',
+    'ROYAL_CHICKEN': '???',
+    'ROYAL_COARSE_BREAD': '????',
+    'ROYAL_GOLD_APPLE': '?????',
+    'ROYAL_GOUDA_CHEESE': '?????',
+    'ROYAL_GREEN_APPLE': '???',
+    'ROYAL_RYE_BREAD': '????',
+    'SILK': '????',
+    'WINE': '???',
 }
-
 _COLORS = {
     'APPLE': (140, 220, 110),
     'BLACK_MARKET': (150, 80, 230),
@@ -71,12 +70,11 @@ _PHASES_EN = {
     'MARKET': 'Mystic Bazaar',
 }
 _PHASES_ZH = {
-    'DECLARE': '吟唱申报',
-    'INSPECT': '真视之眼',
-    'LOAD': '施法装袋',
-    'MARKET': '秘法集市',
+    'DECLARE': '????',
+    'INSPECT': '????',
+    'LOAD': '????',
+    'MARKET': '????',
 }
-
 _UI_EN = {
     'head': 'Phase: {phase}   Round {r}/{t}   Mage Warden: {name}',
     'sheriff_tag': '[Mage Warden] ',
@@ -84,13 +82,11 @@ _UI_EN = {
     'title': 'Sheriff of Arcane Realms',
 }
 _UI_ZH = {
-    'head': '阶段：{phase}   第 {r}/{t} 回合   法师典狱：{name}',
-    'sheriff_tag': '【法师典狱】',
-    'subtitle': '魔法皮肤 | 房主开房 + 自行端口映射联机',
-    'title': '奥术秘境警长',
+    'head': '???{phase}   ? {r}/{t} ??   ?????{name}',
+    'sheriff_tag': '??????',
+    'subtitle': '???? | ???? + ????????',
+    'title': '??????',
 }
-
-
 def register(api):
     for key in _NAMES_EN:
         api.rename(key, _NAMES_EN[key], _NAMES_ZH[key])

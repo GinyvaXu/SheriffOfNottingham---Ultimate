@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Example mod: demonstrates adding card types and patching the engine.
 
 Copy this folder, rename it, set "enabled": true in mod.json, then restart.

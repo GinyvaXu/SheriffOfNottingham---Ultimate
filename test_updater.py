@@ -183,6 +183,15 @@ class DownloadTest(unittest.TestCase):
 
 
 class ApplyTest(unittest.TestCase):
+    def setUp(self):
+        self._flag = updater._pending_flag()
+        if os.path.exists(self._flag):
+            os.remove(self._flag)
+
+    def tearDown(self):
+        if os.path.exists(self._flag):
+            os.remove(self._flag)
+
     def test_apply_update_writes_bat(self):
         exe = r"C:\Games\SheriffOfNottingham.exe"
         with mock.patch.object(updater, "_launch_bat", return_value=True) as launch:
@@ -197,6 +206,19 @@ class ApplyTest(unittest.TestCase):
                     content = f.read()
                 self.assertIn("VERYSILENT", content)
                 self.assertIn(exe, content)
+                launch.assert_called_once()
+
+    def test_apply_update_guard_flag(self):
+        """A second apply_update while one is pending must not double-schedule."""
+        exe = r"C:\Games\SheriffOfNottingham.exe"
+        with mock.patch.object(updater, "_launch_bat", return_value=True) as launch:
+            with tempfile.TemporaryDirectory() as d:
+                inst = os.path.join(d, "Setup.exe")
+                with open(inst, "wb") as f:
+                    f.write(b"x")
+                self.assertTrue(updater.apply_update(inst, exe_path=exe))
+                self.assertTrue(os.path.exists(updater._pending_flag()))
+                self.assertTrue(updater.apply_update(inst, exe_path=exe))
                 launch.assert_called_once()
 
     def test_apply_update_no_exe(self):

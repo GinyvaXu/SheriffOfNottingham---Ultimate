@@ -216,29 +216,68 @@ def _launch_bat(bat_path):
     return True
 
 
+_PENDING_FLAG = "update_pending.flag"
+
+
+def _pending_flag():
+    return os.path.join(download_dir(), _PENDING_FLAG)
+
+
 def apply_update(installer_path, exe_path=None):
     """Schedule the silent reinstall + relaunch. Returns True on success.
 
     Only meaningful in frozen builds (we need the current exe path to
     relaunch after installing). Writes ``run_update.bat`` into %TEMP%.
+
+    A guard flag prevents double-scheduling: if the player clicks install
+    twice (or re-enters the update screen while a reinstall is pending),
+    the second call just returns True because the first batch file is
+    already running the installer.
     """
     exe_path = exe_path or _exe_path()
     if not exe_path:
         return False
     installer_path = os.path.abspath(installer_path)
+    flag = _pending_flag()
+    if os.path.exists(flag):
+        return True  # another install is already running
     bat = os.path.join(download_dir(), "run_update.bat")
+    with io.open(flag, "w", encoding="ascii") as f:
+        f.write("1")
     lines = [
         "@echo off",
+        "setlocal enabledelayedexpansion",
         # give the game process a moment to fully exit and release the exe
-        "ping -n 4 127.0.0.1 >nul",
+        "ping -n 5 127.0.0.1 >nul",
+        # retry the silent install a few times in case the exe is still locked
+        "set /a n=0",
+        ":install",
         '"{0}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART'.format(installer_path),
+        "if errorlevel 1 (",
+        "  set /a n+=1",
+        "  if !n! lss 3 ( ping -n 3 127.0.0.1 >nul & goto install )",
+        ")",
+        # wait until the game exe is really there before launching it
+        "for /l %%i in (1,1,40) do (",
+        '  if exist "{0}" goto launch'.format(exe_path),
+        "  ping -n 1 127.0.0.1 >nul",
+        ")",
+        ":launch",
         'start "" "{0}"'.format(exe_path),
-        'del "{0}"'.format(installer_path),
+        'del "{0}" >nul 2>&1'.format(installer_path),
+        'del "{0}" >nul 2>&1'.format(flag),
         "(goto) 2>nul & del \"%~f0\"",
     ]
     with io.open(bat, "w", encoding="ascii", errors="replace") as f:
         f.write("\r\n".join(lines) + "\r\n")
-    return _launch_bat(bat)
+    ok = _launch_bat(bat)
+    if not ok:
+        try:
+            os.remove(flag)
+        except OSError:
+            pass
+        return False
+    return True
 
 
 def open_release_page():

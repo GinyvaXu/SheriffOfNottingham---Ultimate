@@ -1,7 +1,10 @@
 {
   "id": "arcane",
   "name": "Arcane Realms",
-  "version": "1.1.0",
-  "description": "Fantasy reskin with arcane goods: fey fruit, familiar hens, arcane staves and elven wine. Client-side only. / 魔法世界观换皮：仙灵果、使魔母鸡、奥术法杖与精灵酒等秘法货物。仅客户端生效。",
+  "name_zh": "奥术秘境",
+  "version": "1.2.0",
+  "description": "Fantasy reskin with arcane goods: fey fruit, familiar hens, arcane staves and elven wine. Client-side only.",
+  "description_zh": "魔法世界观换皮：仙灵果、使魔母鸡、奥术法杖与精灵酒等秘法货物。仅客户端生效。",
+  "category": "reskin",
   "enabled": false
 }

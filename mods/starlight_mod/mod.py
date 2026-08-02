@@ -27,24 +27,23 @@ _NAMES_EN = {
 }
 
 _NAMES_ZH = {
-    'APPLE': '水培果',
-    'BLACK_MARKET': '走私星环',
-    'BREAD': '营养膏包',
-    'CHEESE': '合成凝乳',
-    'CHICKEN': '蛋白块',
-    'COFFEE': '引力咖啡',
-    'CROSSBOW': '等离子步枪',
-    'ROYAL_BLUE_CHEESE': '蓝矮星凝乳',
-    'ROYAL_CHICKEN': '基因火鸡',
-    'ROYAL_COARSE_BREAD': '星尘面包',
-    'ROYAL_GOLD_APPLE': '恒星果',
-    'ROYAL_GOUDA_CHEESE': '冷冻凝乳',
-    'ROYAL_GREEN_APPLE': '移民果',
-    'ROYAL_RYE_BREAD': '小行星黑麦',
-    'SILK': '零重力丝绸',
-    'WINE': '星云酒',
+    'APPLE': '???',
+    'BLACK_MARKET': '????',
+    'BREAD': '????',
+    'CHEESE': '????',
+    'CHICKEN': '???',
+    'COFFEE': '????',
+    'CROSSBOW': '?????',
+    'ROYAL_BLUE_CHEESE': '?????',
+    'ROYAL_CHICKEN': '????',
+    'ROYAL_COARSE_BREAD': '????',
+    'ROYAL_GOLD_APPLE': '???',
+    'ROYAL_GOUDA_CHEESE': '????',
+    'ROYAL_GREEN_APPLE': '???',
+    'ROYAL_RYE_BREAD': '?????',
+    'SILK': '?????',
+    'WINE': '???',
 }
-
 _COLORS = {
     'APPLE': (120, 230, 150),
     'BLACK_MARKET': (90, 200, 255),
@@ -71,12 +70,11 @@ _PHASES_EN = {
     'MARKET': 'Trade Deck',
 }
 _PHASES_ZH = {
-    'DECLARE': '报关',
-    'INSPECT': '货舱扫描',
-    'LOAD': '装载货舱',
-    'MARKET': '贸易甲板',
+    'DECLARE': '??',
+    'INSPECT': '????',
+    'LOAD': '????',
+    'MARKET': '????',
 }
-
 _UI_EN = {
     'head': 'Phase: {phase}   Round {r}/{t}   Patrol AI: {name}',
     'sheriff_tag': '[Patrol AI] ',
@@ -84,13 +82,11 @@ _UI_EN = {
     'title': 'Sheriff of Starlight Colony',
 }
 _UI_ZH = {
-    'head': '阶段：{phase}   第 {r}/{t} 回合   巡逻AI：{name}',
-    'sheriff_tag': '【巡逻AI】',
-    'subtitle': '星际皮肤 | 房主开房 + 自行端口映射联机',
-    'title': '星光殖民地警长',
+    'head': '???{phase}   ? {r}/{t} ??   ??AI?{name}',
+    'sheriff_tag': '???AI?',
+    'subtitle': '???? | ???? + ????????',
+    'title': '???????',
 }
-
-
 def register(api):
     for key in _NAMES_EN:
         api.rename(key, _NAMES_EN[key], _NAMES_ZH[key])

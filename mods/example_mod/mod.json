@@ -1,7 +1,10 @@
 {
   "id": "example_mod",
   "name": "Example Mod",
+  "name_zh": "示例模组",
   "version": "0.1.0",
   "description": "Sample mod: adds Tea contraband and a Pear legal good. Disabled by default - copy this folder and set enabled=true to try it.",
+  "description_zh": "示例模组：添加“茶”违禁品与“梨”合法货物。默认禁用，可复制此文件夹并把 enabled 设为 true 体验。",
+  "category": "content",
   "enabled": false
 }

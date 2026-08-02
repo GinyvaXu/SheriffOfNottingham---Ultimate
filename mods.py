@@ -307,6 +307,9 @@ def discover_mods(base=None):
         out.append({"id": manifest["id"], "name": manifest["name"],
                     "version": str(manifest["version"]),
                     "description": str(manifest.get("description", "")),
+                    "name_zh": str(manifest.get("name_zh", "")),
+                    "description_zh": str(manifest.get("description_zh", "")),
+                    "category": str(manifest.get("category", "other")),
                     "folder": folder, "manifest": manifest})
     return out
 
@@ -341,6 +344,9 @@ def list_all_mods(base=None):
             "name": str(manifest.get("name", name)),
             "version": str(manifest.get("version", "0.0.0")),
             "description": str(manifest.get("description", "")),
+            "name_zh": str(manifest.get("name_zh", "")),
+            "description_zh": str(manifest.get("description_zh", "")),
+            "category": str(manifest.get("category", "other")),
             "enabled": bool(manifest.get("enabled", True)),
             "folder": folder,
         })

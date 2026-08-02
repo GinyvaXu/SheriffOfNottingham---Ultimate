@@ -272,9 +272,9 @@ class App:
         if self.mod_names:
             self._append_chat(self._t("mods_line", s=", ".join(self.mod_names)), COLOR_GOLD)
 
-        self.name_input = TextInput((300, 180, 300, 36), self._t("ph_name"))
-        self.players_input = TextInput((300, 240, 300, 36), self._t("ph_players"))
-        self.join_input = TextInput((300, 300, 300, 36), self._t("ph_join"))
+        self.name_input = TextInput((300, 262, 300, 36), self._t("ph_name"))
+        self.players_input = TextInput((300, 330, 300, 36), self._t("ph_players"))
+        self.join_input = TextInput((300, 398, 300, 36), self._t("ph_join"))
         self.rounds_input = TextInput((W // 2 - 260, 545, 110, 36), self._t("ph_rounds"))
         self.lobby_rename_input = TextInput((W // 2 - 260, 480, 200, 36), self._t("ph_name"))
         self.chat_input = TextInput((910, 730, 250, 30), self._t("ph_chat"))
@@ -303,6 +303,11 @@ class App:
 
     def _msg(self, text):
         return lang.translate(text, self.lang)
+
+    def _category_label(self, cat):
+        key = "mods_cat_" + str(cat or "other").lower()
+        s = lang.UI[self.lang].get(key)
+        return s if s else lang.UI[self.lang].get("mods_cat_other", str(cat))
 
     def _append_chat(self, text, color=None):
         self.chat_log.append((text, color))
@@ -488,11 +493,14 @@ class App:
             elif t == "error":
                 self._append_chat("✗ " + self._msg(m.get("msg", "")), COLOR_RED)
             elif t == "server_closed":
-                self.closed = True
-                self.disconnected = True
                 self._append_chat(self._msg(m.get("msg", "") or self._t("room_closed")), COLOR_RED)
-                self.screen_name = "over"
-                self._rebuild_over_ui()
+                if self.is_host:
+                    self._leave_to_menu()
+                else:
+                    self.closed = True
+                    self.disconnected = True
+                    self.screen_name = "over"
+                    self._rebuild_over_ui()
         if self.disconnected and not self.closed and self.host_addr and not self.done:
             now = time.time()
             if now - self._last_reconnect > 3:
@@ -517,13 +525,13 @@ class App:
 
     def _rebuild_menu_ui(self):
         self.buttons = [
-            Button((300, 380, 150, 44), self._t("btn_create"), self._create_room_click),
-            Button((470, 380, 150, 44), self._t("btn_join"), self._join_room),
-            Button((640, 380, 100, 44), self._t("btn_quit"), lambda: setattr(self, "done", True)),
-            Button((300, 440, 150, 44), self._t("btn_mods"), self._open_mods),
-            Button((470, 440, 150, 44), self._t("btn_market"), self._open_market),
-            Button((640, 440, 150, 44), self._t("btn_update"), self._open_update),
-            Button((610, 300, 90, 36), self._t("btn_paste"), self._paste_join),
+            Button((300, 500, 150, 44), self._t("btn_create"), self._create_room_click),
+            Button((470, 500, 150, 44), self._t("btn_join"), self._join_room),
+            Button((640, 500, 100, 44), self._t("btn_quit"), lambda: setattr(self, "done", True)),
+            Button((300, 560, 150, 44), self._t("btn_mods"), self._open_mods),
+            Button((470, 560, 150, 44), self._t("btn_market"), self._open_market),
+            Button((640, 560, 150, 44), self._t("btn_update"), self._open_update),
+            Button((610, 398, 90, 36), self._t("btn_paste"), self._paste_join),
             Button((W - 170, 20, 140, 40), self._t("btn_lang"), self._toggle_lang),
         ]
 
@@ -751,8 +759,12 @@ class App:
 
     def _rebuild_over_ui(self):
         if self.closed:
-            self.buttons = [Button((W // 2 - 100, 660, 200, 46), self._t("btn_close"),
-                                   lambda: setattr(self, "done", True))]
+            self.buttons = [
+                Button((W // 2 - 210, 660, 200, 46), self._t("btn_back_menu"),
+                       self._leave_to_menu),
+                Button((W // 2 + 10, 660, 200, 46), self._t("btn_quit"),
+                       lambda: setattr(self, "done", True)),
+            ]
         else:
             self.buttons = [
                 Button((W // 2 - 210, 660, 200, 46), self._t("btn_back_room"),
@@ -785,6 +797,33 @@ class App:
         self.screen_name = "menu"
         self._rebuild_menu_ui()
 
+    def _leave_to_menu(self):
+        if self.client:
+            try:
+                self.client.close()
+            except Exception:
+                pass
+            self.client = None
+        if self.server:
+            try:
+                self.server.stop()
+            except Exception:
+                pass
+            self.server = None
+        self.is_host = False
+        self.host_addr = None
+        self.lobby = None
+        self.view = None
+        self.server_info = []
+        self.disconnected = False
+        self.closed = False
+        self.selected = set()
+        self.decl_type = None
+        self._last_reconnect = 0
+        self.reconnect_tries = 0
+        self.screen_name = "menu"
+        self._rebuild_menu_ui()
+
     def _rebuild_mods_ui(self):
         self.buttons = []
         for i, m in enumerate(self.mod_list[:7]):
@@ -812,11 +851,14 @@ class App:
         for i, m in enumerate(mlist[:7]):
             pygame.draw.rect(self.screen, COLOR_PANEL, (60, y, 1160, 72), border_radius=8)
             state = self._t("mods_on" if m["enabled"] else "mods_off")
-            t = get_font(20).render("{0}  v{1}   {2}".format(m["name"], m["version"], state),
+            mname = (m.get("name_zh") or m["name"]) if self.lang == "zh" else m["name"]
+            t = get_font(20).render("{0}  v{1}   {2}".format(mname, m["version"], state),
                                     True, COLOR_GOLD if m["enabled"] else COLOR_TEXT)
             self.screen.blit(t, (80, y + 8))
-            if m["description"]:
-                d = get_font(15).render(m["description"], True, COLOR_DIM)
+            mdesc = ((m.get("description_zh") or "") or m.get("description", ""))                 if self.lang == "zh" else m.get("description", "")
+            cat = self._category_label(m.get("category", "other"))
+            if mdesc:
+                d = get_font(15).render((cat + "  " + mdesc)[:110], True, COLOR_DIM)
                 self.screen.blit(d, (80, y + 38))
             y += 80
         if len(mlist) > 7:
@@ -932,7 +974,7 @@ class App:
         for i, info in enumerate(self.market_mods[:6]):
             status, ver = market.local_status(info)
             pygame.draw.rect(self.screen, COLOR_PANEL, (60, y, 1160, 72), border_radius=8)
-            label = self._market_label(info, status, ver)
+            label = self._category_label(info.get("category", "other")) + " " + self._market_label(info, status, ver)
             t = get_font(20).render(label, True, COLOR_TEXT)
             self.screen.blit(t, (80, y + 8))
             desc = (info.get("description") or {})
@@ -1091,7 +1133,7 @@ class App:
             self.screen.blit(t, (cx, 264))
         notes = (info or {}).get("notes", "")
         if notes and st in ("available", "downloaded", "installing"):
-            self._draw_block(self.screen, self._t("update_notes") + notes, cx, 320,
+            self._draw_block(self.screen, self._t("update_notes") + notes[:260], cx, 320,
                              get_font(17), COLOR_DIM, 620)
         for b in self.buttons:
             b.draw(self.screen)
@@ -1122,17 +1164,20 @@ class App:
         self.screen.blit(title, title.get_rect(center=(W // 2, 100)))
         sub = get_font(20).render(self._t("subtitle"), True, COLOR_DIM)
         self.screen.blit(sub, sub.get_rect(center=(W // 2, 142)))
+        sy = 164
         if self.mod_names:
             t = get_font(16).render(self._t("mods_line", s=", ".join(self.mod_names)),
                                     True, COLOR_GOLD)
-            self.screen.blit(t, t.get_rect(center=(W // 2, 176)))
+            self.screen.blit(t, t.get_rect(center=(W // 2, sy)))
+            sy += 26
         if self.mod_errors:
             t = get_font(15).render(self._t("mods_error", s="; ".join(self.mod_errors)),
                                     True, COLOR_RED)
-            self.screen.blit(t, t.get_rect(center=(W // 2, 200)))
+            self.screen.blit(t, t.get_rect(center=(W // 2, sy)))
+            sy += 26
         if self.update_banner:
             t = get_font(16).render(self.update_banner, True, COLOR_GREEN)
-            self.screen.blit(t, t.get_rect(center=(W // 2, 224)))
+            self.screen.blit(t, t.get_rect(center=(W // 2, sy)))
         for lbl, inp in [(self._t("lbl_name"), self.name_input),
                          (self._t("lbl_players"), self.players_input),
                          (self._t("lbl_join"), self.join_input)]:
@@ -1141,7 +1186,7 @@ class App:
             inp.draw(self.screen)
         if self.menu_note:
             t = get_font(16).render(self.menu_note, True, COLOR_DIM)
-            self.screen.blit(t, (160, 344))
+            self.screen.blit(t, (160, 468))
         for b in self.buttons:
             b.draw(self.screen)
 
@@ -1156,14 +1201,14 @@ class App:
                 tag += self._t("bot_tag", l=self._t("lvl_" + str(j["bot"]))) + " "
             t = get_font(24).render(f"{i + 1}. {tag}{j['name']}", True, COLOR_TEXT)
             self.screen.blit(t, (W // 2 - 200, 120 + i * 40))
+        cnt_y = 120 + max(len(joined), 1) * 40 + 8
         cnt = self._t("joined", n=len(joined), m=info.get("max_players", "?"))
         t = get_font(20).render(cnt, True, COLOR_DIM)
-        self.screen.blit(t, (W // 2 - 200, 120 + max(len(joined), 1) * 40 + 8))
-        y = 320
+        self.screen.blit(t, (W // 2 - 200, cnt_y))
+        y = cnt_y + 36
         for idx, (key, kw) in enumerate(self.server_info):
             t = get_font(18).render(self._t(key, **kw), True, COLOR_DIM)
             self.screen.blit(t, (W // 2 - 200, y + idx * 24))
-            y2 = y + idx * 24 + 24
         hint = get_font(15).render(self._t("rule_hint"), True, COLOR_GOLD)
         self.screen.blit(hint, (W // 2 - 200, y + len(self.server_info) * 24 + 6))
         # rename
@@ -1501,6 +1546,10 @@ class App:
         if self.screen_name in ("lobby", "game", "over"):
             self._append_chat(self._t("connected"))
         while not self.done:
+            if self._update_ui_dirty:
+                self._update_ui_dirty = False
+                if self.screen_name == "update":
+                    self._rebuild_update_ui()
             for ev in pygame.event.get():
                 if ev.type == pygame.QUIT:
                     self.done = True

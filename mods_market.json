@@ -1,17 +1,18 @@
 {
-  "version": 2,
+  "version": 3,
   "mods": [
     {
       "id": "cyberpunk",
       "folder": "cyberpunk_mod",
-      "version": "1.2.0",
+      "version": "1.3.0",
+      "category": "reskin",
       "name": {
         "en": "Cyberpunk Overlay",
         "zh": "赛博朋克换皮"
       },
       "description": {
         "en": "Neon reskin with iconic cyberpunk goods: rail-guns, neuro-stims, night-brew and memory silk. Client-side only.",
-        "zh": "霓虹赛博风格：磁轨枪、神经兴奋剂、夜酿与记忆丝绸等未来都市货物。仅客户端生效。"
+        "zh": "霓虹赛博朋克风格：磁轨枪、神经兴奋剂、夜酿与记忆丝绸等未来都市货物。仅客户端生效。"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/cyberpunk_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/cyberpunk_mod.zip"
@@ -19,14 +20,15 @@
     {
       "id": "medieval",
       "folder": "medieval_mod",
-      "version": "1.1.0",
+      "version": "1.2.0",
+      "category": "reskin",
       "name": {
         "en": "Medieval England",
         "zh": "中世纪英格兰"
       },
       "description": {
         "en": "Medieval reskin with period goods: fattened capons, monastery cheese, oat loaves and monks' mead. Client-side only.",
-        "zh": "中世纪换皮：肥育阉鸡、修道院奶酪、燕麦面包与修士蜜酒等时代货物。仅客户端生效。"
+        "zh": "中世纪换皮：肥腴阉鸡、修道院奶酪、燕麦面包与修士蜂蜜酒等时代货物。仅客户端生效。"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/medieval_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/medieval_mod.zip"
@@ -34,7 +36,8 @@
     {
       "id": "starlight",
       "folder": "starlight_mod",
-      "version": "1.1.0",
+      "version": "1.2.0",
+      "category": "reskin",
       "name": {
         "en": "Starlight Colony",
         "zh": "星光殖民地"
@@ -49,10 +52,11 @@
     {
       "id": "steampunk",
       "folder": "steampunk_mod",
-      "version": "1.1.0",
+      "version": "1.2.0",
+      "category": "reskin",
       "name": {
         "en": "Steamforge City",
-        "zh": "蒸汽锻炉城"
+        "zh": "蒸汽锻造城"
       },
       "description": {
         "en": "Steampunk reskin with brass-age goods: clockwork fowl, cog-cheese, steam rifles and coal whiskey. Client-side only.",
@@ -64,7 +68,8 @@
     {
       "id": "arcane",
       "folder": "arcane_mod",
-      "version": "1.1.0",
+      "version": "1.2.0",
+      "category": "reskin",
       "name": {
         "en": "Arcane Realms",
         "zh": "奥术秘境"

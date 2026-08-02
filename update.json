@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
-  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.3.0/SheriffOfNottingham-Setup-1.3.0.exe",
-  "notes": "v1.3.0: In-game Mods Market (one-click download & install), 5 text-only reskin mods (cyberpunk/medieval/starlight/steampunk/arcane), chat messages now follow the local reskin."
+  "version": "1.3.1",
+  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.3.1/SheriffOfNottingham-Setup-1.3.1.exe",
+  "notes": "v1.3.1: Fixed update flow (install & restart button now appears after download, no DLL error on re-entering), closing a room mid-game returns to main menu, mod list localized (ZH) with category labels, GUI overlap fixes, reskin mods fully translated to Chinese."
 }
