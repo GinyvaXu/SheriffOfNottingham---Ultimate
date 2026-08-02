@@ -44,6 +44,7 @@ TYPE_EN = {
     "ROYAL_RYE_BREAD": "Rye Bread", "ROYAL_COARSE_BREAD": "Coarse Bread",
     "ROYAL_CHICKEN": "Royal Chicken",
     "BLACK_MARKET": "Black Market",
+    "POT": "Bribe Pot",
 }
 
 TYPE_ZH = {
@@ -54,6 +55,7 @@ TYPE_ZH = {
     "ROYAL_RYE_BREAD": "\u9ed1\u9ea6\u9762\u5305", "ROYAL_COARSE_BREAD": "\u7c97\u7cae\u9762\u5305",
     "ROYAL_CHICKEN": "\u7687\u5bb6\u9e21\u8089",
     "BLACK_MARKET": "\u9ed1\u5e02",
+    "POT": "\u8d4f\u91d1\u6c60",
 }
 
 KING_BONUS = {"APPLE": 20, "CHICKEN": 10, "CHEESE": 15, "BREAD": 15}
@@ -79,6 +81,40 @@ BLACK_MARKET_GROUPS = 3
 BLACK_MARKET_NEED = 3
 BLACK_MARKET_REWARD_RANGES = [(30, 35), (25, 30)]  # (min, max) per slot
 BLACK_MARKET_CARD_BONUS = 25      # end-game points per black-market card held
+
+# ---------- Rule-mod extension hooks (all default OFF = classic rules) ----------
+# Each value can be patched by a rules mod (api.patch("game", "X", ...)). The
+# host server enforces the same mod set for everyone (id+version check), so a
+# mod that enables any of these must be installed by all players in the room.
+
+# Bribe Economics: share (0..1) of every accepted bribe that goes into a public
+# pot instead of the sheriff. 0 = classic (sheriff keeps everything).
+BRIBE_POT_RATIO = 0
+# Pot payout mode: "split" divides the pot equally at game end (remainder to the
+# richest merchant). Kept as one mode for balance simplicity.
+BRIBE_POT_MODE = "split"
+
+# Trade Caravans: extra gold paid per card of the round's route good that
+# passes the sheriff. 0 = off.
+ROUTE_BONUS = 0
+
+# Guild Contracts: number of secret contracts dealt at game start (0 = off).
+# Each contract = (legal type, needed delivered count, gold reward).
+GUILD_CONTRACTS = 0
+
+# Royal Favor: gold reward milestones for royal cards smuggled past the sheriff.
+ROYAL_FAVOR = 0
+ROYAL_FAVOR_MILESTONES = [(2, 6), (4, 10), (6, 18)]
+
+# Merchant Reputation: 0 = off. Perks unlock at reputation thresholds.
+REPUTATION = 0
+REP_DISCARD_AT = 1   # may discard one extra card in the market
+REP_FINE_AT = 3      # fines the merchant pays are -10%
+REP_HAND_AT = 5      # refills to HAND_SIZE+1 at round end
+
+# Night Market: seconds allowed per action before the server auto-plays a
+# default action. 0 = no timer (classic indefinite wait).
+ACTION_TIMEOUT = 0
 
 
 def _card_counts(players):
@@ -156,6 +192,9 @@ class Player:
         self.bribe = None     # {"gold":..., "msg":...}
         self.connected = True
         self.black_market_cards = 0   # black-market reward cards held (+25 each at game end)
+        self.reputation = 0           # merchant reputation (rule mod)
+        self.royal_favor = 0          # royal cards smuggled past the sheriff (rule mod)
+        self.contracts = []           # secret guild contracts [{type,need,reward,done}] (rule mod)
 
     def view_public(self):
         return {
@@ -170,6 +209,8 @@ class Player:
             "bag_size": len(self.bag) if self.bag_loaded else 0,
             "decl": self.decl,
             "connected": self.connected,
+            "reputation": self.reputation,
+            "royal_favor": self.royal_favor,
         }
 
 
@@ -218,6 +259,25 @@ class Game:
                 self.quest_rewards[t] = [first, second]
             self.quest_claimed = {t: 0 for t in self.quest_types}
             self.quest_claimers = {t: [None, None] for t in self.quest_types}
+        # Rule-mod state
+        self.pot = 0                  # public bribe pot (Bribe Economics)
+        self.route_type = None        # current round's trade route good
+        self._route_history = []      # recent route goods (avoid repeats)
+        if GUILD_CONTRACTS:
+            self._deal_contracts()
+
+    def _deal_contracts(self):
+        """Deal secret contracts to each player at game start (3p gets one fewer)."""
+        pool = [t for t in LEGAL if GOODS[t]["cnt%d" % _card_counts(self.n)] > 0]
+        cnt = GUILD_CONTRACTS if self.n >= 4 else max(1, GUILD_CONTRACTS - 1)
+        for p in self.players:
+            p.contracts = []
+            for _ in range(cnt):
+                t = self.rng.choice(pool)
+                need = {2: 5, 3: 4, 4: 3}.get(GOODS[t]["value"], 4)
+                reward = need * GOODS[t]["value"] + 10
+                p.contracts.append({"type": t, "need": need,
+                                    "reward": reward, "done": False})
 
     # ---------- Round progression ----------
 
@@ -230,6 +290,13 @@ class Game:
             p.decl = None
             p.bribe = None
         self.order = [(self.sheriff + i) % self.n for i in range(1, self.n)]
+        if ROUTE_BONUS:
+            pool = [t for t in LEGAL if GOODS[t]["cnt%d" % _card_counts(self.n)] > 0
+                    and t not in self._route_history[-2:]]
+            if not pool:
+                pool = [t for t in LEGAL if GOODS[t]["cnt%d" % _card_counts(self.n)] > 0]
+            self.route_type = self.rng.choice(pool)
+            self._route_history.append(self.route_type)
         self.phase = "MARKET"
         self.market_idx = 0
         self.discard_hold = {}
@@ -260,8 +327,11 @@ class Game:
         if seat != self.market_current():
             return False, "Not your turn"
         idx = sorted(set(indices))
-        if len(idx) > DISCARD_MAX:
-            return False, "You can discard at most 5"
+        limit = DISCARD_MAX
+        if REPUTATION and self.players[seat].reputation >= REP_DISCARD_AT:
+            limit += 1
+        if len(idx) > limit:
+            return False, f"You can discard at most {limit}"
         hand = self.players[seat].hand
         chosen = [hand[i] for i in idx if 0 <= i < len(hand)]
         for i in reversed(idx):
@@ -375,14 +445,24 @@ class Game:
         bribe = owner.bribe or {"gold": 0, "msg": ""}
         if action == "pass":
             if bribe["gold"] > 0:
-                res = transfer(owner, sheriff, bribe["gold"])
-                events.append(f"{owner.name} bribes the Sheriff {bribe['gold']} gold")
-                if res != f"pays {bribe['gold']} gold":
-                    events.append(res)
+                if BRIBE_POT_RATIO > 0:
+                    total = min(int(bribe["gold"]), owner.gold)
+                    owner.gold -= total
+                    pot_share = int(total * BRIBE_POT_RATIO)
+                    sheriff.gold += total - pot_share
+                    self.pot += pot_share
+                    events.append(f"{owner.name} bribes the Sheriff {total - pot_share} gold "
+                                  f"({pot_share} gold goes to the public pot)")
+                else:
+                    res = transfer(owner, sheriff, bribe["gold"])
+                    events.append(f"{owner.name} bribes the Sheriff {bribe['gold']} gold")
+                    if res != f"pays {bribe['gold']} gold":
+                        events.append(res)
             if bribe["msg"]:
                 events.append(f"{owner.name}'s promise: {bribe['msg']}")
             for c in owner.bag:
                 events.extend(self._deliver(owner, c))
+            self._route_bonus(owner, owner.bag, events)
             events.append(f"{owner.name} passes unchecked ({len(owner.bag)} card(s) enter)")
         else:
             decl_type = owner.decl["type"]
@@ -393,9 +473,13 @@ class Game:
                 res = transfer(sheriff, owner, penalty)
                 for c in owner.bag:
                     events.extend(self._deliver(owner, c))
+                self._route_bonus(owner, owner.bag, events)
                 events.append(f"Inspection of {owner.name}: TRUTH! Sheriff pays {penalty} gold")
                 if res != f"pays {penalty} gold":
                     events.append(res)
+                if REPUTATION:
+                    owner.reputation += 1
+                    events.append(f"{owner.name}'s reputation +1 -> {owner.reputation}")
             else:
                 for c in declared:
                     events.extend(self._deliver(owner, c))
@@ -408,6 +492,9 @@ class Game:
                 if seized:
                     detail = ", ".join(f"{TYPE_EN[t]}x{n}" for t, n in _counts(seized).items())
                     fine = sum(c.get("fine", c["value"]) for c in seized)
+                    if REPUTATION and owner.reputation >= REP_FINE_AT:
+                        fine = int(fine * 0.9)
+                        events.append(f"{owner.name}'s reputation discounts the fine by 10%")
                     res = transfer(owner, sheriff, fine)
                     events.append(
                         f"Inspection of {owner.name}: LIE! {len(seized)} contraband seized "
@@ -419,6 +506,10 @@ class Game:
                     events.append(
                         f"Inspection of {owner.name}: LIE but all legal - "
                         f"{len(hidden)} card(s) enter, nothing seized")
+                self._route_bonus(owner, owner.bag, events)
+                if REPUTATION:
+                    owner.reputation -= 1
+                    events.append(f"{owner.name}'s reputation -1 -> {owner.reputation}")
         owner.bag = []
         owner.bag_loaded = False
         owner.bribe = None
@@ -431,6 +522,18 @@ class Game:
                 events.append(f"Round {self.round_no - 1} complete. Round {self.round_no} starts.")
         return True, events
 
+    def _route_bonus(self, player, cards, events):
+        """Trade Caravans: award ROUTE_BONUS per legal route-type card delivered."""
+        if not (ROUTE_BONUS and self.route_type):
+            return
+        n = sum(1 for c in cards
+                if c["type"] == self.route_type and not is_contraband(c))
+        if n:
+            bonus = ROUTE_BONUS * n
+            player.gold += bonus
+            events.append(f"{player.name} delivers {n} {TYPE_EN[self.route_type]} "
+                          f"on the trade route: +{bonus} gold")
+
     def _deliver(self, player, card):
         """Deliver a card past the sheriff. Royal cards are announced (visible stall)."""
         events = []
@@ -441,6 +544,13 @@ class Game:
             events.append(
                 f"{player.name} smuggled {TYPE_EN[card['type']]} "
                 f"(counts as {card.get('equals', 2)} {TYPE_EN[card['royal_type']]})")
+            if ROYAL_FAVOR:
+                player.royal_favor += 1
+                for lvl, reward in ROYAL_FAVOR_MILESTONES:
+                    if player.royal_favor == lvl:
+                        player.gold += reward
+                        events.append(f"{player.name} reaches Royal Favor {lvl}: +{reward} gold")
+                        break
         else:
             player.stand_contra.append(card)
         return events
@@ -501,7 +611,10 @@ class Game:
 
     def end_round(self):
         for p in self.players:
-            while len(p.hand) < HAND_SIZE:
+            target = HAND_SIZE
+            if REPUTATION and p.reputation >= REP_HAND_AT:
+                target += 1
+            while len(p.hand) < target:
                 self._ensure_deck(1)
                 if not self.deck:
                     break
@@ -592,10 +705,51 @@ class Game:
                 for r in rows if r["black_market_cards"] > 0]})
         return entries
 
+    def _pot_awards(self):
+        """Bribe Economics: equal shares of the pot, remainder to the richest."""
+        if self.pot <= 0 or BRIBE_POT_RATIO <= 0:
+            return []
+        n = max(1, self.n)
+        share = self.pot // n
+        rem = self.pot - share * n
+        aw = [{"seat": i, "bonus": share} for i in range(self.n)]
+        if rem:
+            rows = self._base_rows()
+            top = max(rows, key=lambda r: r["value"])
+            for a in aw:
+                if a["seat"] == top["seat"]:
+                    a["bonus"] += rem
+        return aw
+
+    def _pot_payout(self, rows):
+        for a in self._pot_awards():
+            seat = a["seat"]
+            if a["bonus"]:
+                rows[seat]["bonus"] += a["bonus"]
+                rows[seat]["bonus_detail"].append({"type": "POT", "bonus": a["bonus"]})
+
+    def _contract_rows(self, rows):
+        """Guild Contracts: reward each fulfilled secret contract at game end."""
+        if not GUILD_CONTRACTS:
+            return
+        for r in rows:
+            p = self.players[r["seat"]]
+            for ct in p.contracts:
+                if ct["done"]:
+                    continue
+                eff = r["legal"].get(ct["type"], 0) + r["royal"].get(ct["type"], 0)
+                if eff >= ct["need"]:
+                    ct["done"] = True
+                    r["bonus"] += ct["reward"]
+                    r["bonus_detail"].append(
+                        {"type": ct["type"], "bonus": ct["reward"], "count": eff})
+
     def score(self):
         rows = self._base_rows()
         self._legal_king_queen(rows)
         self._black_market_rows(rows)
+        self._contract_rows(rows)
+        self._pot_payout(rows)
         for r in rows:
             r["final"] = r["value"] + r["bonus"]
         rows.sort(key=lambda r: (-r["final"], -r["legal_total"], -r["contra_total"]))
@@ -611,4 +765,8 @@ class Game:
         for e in self._black_market_rows(rows):
             table.append({"kind": "blackmarket", "type": e["type"], "awards": [
                 {"name": self.players[a["seat"]].name, "bonus": a["bonus"]} for a in e["awards"]]})
+        pot = self._pot_awards()
+        if pot:
+            table.append({"kind": "pot", "type": "POT", "awards": [
+                {"name": self.players[a["seat"]].name, "bonus": a["bonus"]} for a in pot]})
         return table

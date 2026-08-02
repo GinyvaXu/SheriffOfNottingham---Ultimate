@@ -1,5 +1,5 @@
 {
-  "version": "1.4.1",
-  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.4.1/SheriffOfNottingham-Setup-1.4.1.exe",
-  "notes": "v1.4.1: player profiles + avatars (8 built-in, upload your own picture, auto-saved locally, visible to everyone online, themed avatar palettes for all 5 reskin mods); Mods/Market screens no longer truncate the list (Spice Road now shows); restart-game button appears after enabling/installing mods; update-restart fixed (single CRLF batch file + wait for old process to exit)."
+  "version": "1.5.0",
+  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.5.0/SheriffOfNottingham-Setup-1.5.0.exe",
+  "notes": "v1.5.0 - GUI polish + 6 new rule mods\nGUI: Home screen redesigned into grouped panels (Game Setup / Avatars / Tools); lobby split into Players / Rule Mods / Host Settings; cleaner cards, buttons and market layouts. Update check page now shows the full changelog of the new version.\nNew rule mods (in-game Mods page, host-enforced): Bribe Economics, Night Market Timer, Trade Caravans, Guild Contracts, Royal Favor, Merchant Reputation.\nMod compatibility: conflicting rule mods are blocked at game start with a clear warning.\nBots: 4 personalities (Paranoid / Greedy / Honest / Reckless) so same-difficulty bots are distinguishable."
 }

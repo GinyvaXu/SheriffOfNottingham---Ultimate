@@ -359,6 +359,7 @@ def list_all_mods(base=None):
             "description_zh": str(manifest.get("description_zh", "")),
             "category": str(manifest.get("category", "other")),
             "enabled": bool(manifest.get("enabled", True)),
+            "incompatible_with": [str(x) for x in (manifest.get("incompatible_with") or [])],
             "folder": folder,
         })
     return out
@@ -466,3 +467,36 @@ def rules_mods(base=None):
 def is_rules_mod(info):
     """True when a mod info dict is a rule mod (category == "rules")."""
     return str((info or {}).get("category", "other")) == "rules"
+
+
+def check_compat(mod_infos):
+    """Find declared incompatibilities among enabled mods.
+
+    ``mod_infos``: list of info dicts from list_all_mods()/rules_mods(). A mod
+    declares conflicts with ``"incompatible_with": ["other_id", ...]`` in its
+    mod.json (checked in both directions). Returns a list of
+    (modA_info, modB_info) pairs that must not be enabled together.
+    """
+    enabled = [m for m in (mod_infos or []) if m.get("enabled", False)]
+    by_id = {}
+    for m in enabled:
+        by_id.setdefault(str(m.get("id", "")).lower(), []).append(m)
+    pairs = set()
+    out = []
+    for m in enabled:
+        mid = str(m.get("id", "")).lower()
+        for other in (m.get("incompatible_with") or []):
+            oid = str(other).strip().lower()
+            if not oid or oid == mid:
+                continue
+            for other_mod in by_id.get(oid, []):
+                key = tuple(sorted((mid, oid)))
+                if key not in pairs:
+                    pairs.add(key)
+                    out.append((m, other_mod))
+    return out
+
+
+def enabled_rule_mods_compat(base=None):
+    """Return conflicts among enabled rule mods (used by the lobby/server)."""
+    return check_compat([m for m in list_all_mods(base) if is_rules_mod(m)])

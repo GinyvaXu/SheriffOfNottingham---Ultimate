@@ -69,7 +69,11 @@ class GameServer:
         self.stopped = False
         self._discarded = {}    # game_seat -> whether this round's discard is done
         self._seen_round = 0
-        self.bot_levels = {}    # game_seat -> bot difficulty level
+        self.bot_levels = {}            # game_seat -> bot difficulty level
+        self.bot_personalities = {}     # game_seat -> bot personality tag (optional)
+        self._last_action_ts = time.time()
+        self._timeout_thread = threading.Thread(target=self._tick_timeouts, daemon=True)
+        self._timeout_thread.start()
         self.srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.srv.bind(("0.0.0.0", port))
@@ -246,8 +250,16 @@ class GameServer:
 
     def _broadcast_lobby(self):
         joined = [{"seat": i, "name": s["name"], "host": i == 0,
-                   "bot": s.get("bot"), "avatar": s.get("avatar")}
+                   "bot": s.get("bot"), "avatar": s.get("avatar"),
+                   "personality": s.get("personality")}
                   for i, s in enumerate(self.seats) if s is not None]
+        conflicts = []
+        try:
+            import mods as _mods
+            for a, b in _mods.enabled_rule_mods_compat():
+                conflicts.append([a.get("id"), b.get("id")])
+        except Exception:  # noqa: BLE001 - conflicts are advisory
+            conflicts = []
         host_mods = self.seats[0]["rules_mods"] if self.seats[0] else []
         players_mods = []
         for i, s in enumerate(self.seats):
@@ -261,7 +273,7 @@ class GameServer:
                 _send(s["conn"], {"t": "lobby", "max_players": self.max_players,
                                   "joined": joined, "can_start": len(joined) >= 2 and i == 0,
                                   "rules_mods": host_mods, "players_mods": players_mods,
-                                  "mods_ok": mods_ok})
+                                  "mods_ok": mods_ok, "rmods_conflicts": conflicts})
 
     def _dispatch(self, seat, msg):
         t = msg.get("t")
@@ -293,9 +305,21 @@ class GameServer:
                         _send(s["conn"], {"t": "error", "msg": "Rule mods mismatch - " + names})
                         self._broadcast({"t": "mods_mismatch", "missing": bad})
                         return
+                    try:
+                        import mods as _mods
+                        conflicts = _mods.enabled_rule_mods_compat()
+                    except Exception:  # noqa: BLE001
+                        conflicts = []
+                    if conflicts:
+                        names = ", ".join(f"{a['name']} x {b['name']}" for a, b in conflicts)
+                        _send(s["conn"], {"t": "error",
+                                          "msg": "Incompatible rule mods: " + names})
+                        self._broadcast({"t": "mods_incompatible", "names": names})
+                        return
                     self._start_game(joined, msg.get("rounds"))
                 elif t == "add_bot" and seat == 0:
-                    self._add_bot(str(msg.get("level", "normal")).lower())
+                    self._add_bot(str(msg.get("level", "normal")).lower(),
+                                  msg.get("personality") or None)
                 elif t == "remove_bot" and seat == 0:
                     self._remove_bot(msg.get("seat"))
                 return
@@ -334,12 +358,16 @@ class GameServer:
                               black_market=self.black_market,
                               rounds_total=rounds or self.rounds_total)
         self.bot_levels = {}
+        self.bot_personalities = {}
         for gi, si in enumerate(joined):
             self.seats[si]["game_seat"] = gi
             if self.seats[si].get("bot"):
                 self.bot_levels[gi] = self.seats[si]["bot"]
+                if self.seats[si].get("personality"):
+                    self.bot_personalities[gi] = self.seats[si]["personality"]
         self.game.start_round()
         self.started = True
+        self._last_action_ts = time.time()
         self._discarded = {}
         self._seen_round = self.game.round_no
         self._broadcast({"t": "game_start", "msg": "Game started!"})
@@ -401,6 +429,7 @@ class GameServer:
         if not ok:
             _send(s["conn"], {"t": "error", "msg": banner or "Action failed"})
             return
+        self._last_action_ts = time.time()
         for e in events:
             self._broadcast({"t": "banner", "msg": e})
         if banner:
@@ -422,15 +451,23 @@ class GameServer:
     def _bot_level(self, gseat):
         return self.bot_levels.get(gseat, "normal")
 
-    def _add_bot(self, level):
+    def _bot_personality(self, gseat):
+        return self.bot_personalities.get(gseat)
+
+    def _add_bot(self, level, personality=None):
         if level not in bot.LEVELS:
             level = "normal"
+        if personality not in bot.PERSONALITIES:
+            personality = None
         seat = next((i for i, s in enumerate(self.seats) if s is None), None)
         if seat is None:
             return
-        n = sum(1 for s in self.seats if s and s.get("bot") == level)
-        self.seats[seat] = {"name": bot.bot_name(level, n + 1), "conn": None, "reader": None,
+        n = sum(1 for s in self.seats if s and s.get("bot") == level
+                and s.get("personality") == personality)
+        self.seats[seat] = {"name": bot.bot_name(level, n + 1, personality),
+                            "conn": None, "reader": None,
                             "seat": seat, "game_seat": None, "bot": level,
+                            "personality": personality,
                             "avatar": {"kind": "builtin",
                                        "id": bot.bot_avatar(level, n + 1)}}
         self._broadcast_lobby()
@@ -492,7 +529,7 @@ class GameServer:
     def _bot_market(self, seat):
         g = self.game
         p = g.players[seat]
-        idx = bot.choose_discard(g, seat, self._bot_level(seat))
+        idx = bot.choose_discard(g, seat, self._bot_level(seat), self._bot_personality(seat))
         ok, msg = g.do_market_discard(seat, idx)
         if not ok:
             return False
@@ -516,7 +553,7 @@ class GameServer:
         acted = False
         for si in pending:
             p = g.players[si]
-            idx = bot.choose_load(g, si, self._bot_level(si))
+            idx = bot.choose_load(g, si, self._bot_level(si), self._bot_personality(si))
             ok, msg = g.do_load(si, idx)
             if ok:
                 acted = True
@@ -528,14 +565,14 @@ class GameServer:
 
     def _bot_declare(self, seat):
         g = self.game
-        ctype = bot.choose_declare(g, seat, self._bot_level(seat))
+        ctype = bot.choose_declare(g, seat, self._bot_level(seat), self._bot_personality(seat))
         ok, _ = g.do_declare(seat, ctype)
         self._broadcast_views()
         return ok
 
     def _bot_bribe(self, target):
         g = self.game
-        gold, msg = bot.choose_bribe(g, target, self._bot_level(target))
+        gold, msg = bot.choose_bribe(g, target, self._bot_level(target), self._bot_personality(target))
         ok, _ = g.do_bribe(target, gold, msg)
         if ok and (gold or msg):
             pub = f"{g.players[target].name} offers a bribe of {gold} gold"
@@ -547,7 +584,7 @@ class GameServer:
 
     def _bot_inspect_decision(self):
         g = self.game
-        action = bot.choose_inspect(g, g.sheriff, self._bot_level(g.sheriff))
+        action = bot.choose_inspect(g, g.sheriff, self._bot_level(g.sheriff), self._bot_personality(g.sheriff))
         ok, events = g.do_inspect_decision(g.sheriff, action)
         if ok:
             for e in events:
@@ -585,6 +622,9 @@ class GameServer:
             "bag": [_card(c) for c in p.bag],
             "stand_contra": [_card(c) for c in p.stand_contra],
             "black_market_cards": p.black_market_cards,
+            "contracts": [dict(ct) for ct in p.contracts],
+            "reputation": p.reputation,
+            "royal_favor": p.royal_favor,
         }
 
     def _prompt_for(self, gseat):
@@ -672,6 +712,9 @@ class GameServer:
             "acting": self._acting_name(),
             "acting_phase": self._acting_phase(),
             "black_market": g.black_market_view(),
+            "route": g.route_type,
+            "pot": g.pot,
+            "time_left": self._time_left(),
         }
         if g.phase == "GAME_OVER":
             pub["scores"] = g.score()
@@ -681,6 +724,144 @@ class GameServer:
             pub["you"] = self._private_view(gseat)
             pub["prompt"] = self._prompt_for(gseat)
         return pub
+
+    def _time_left(self):
+        """Seconds left on the current action (Night Market mod) or None."""
+        try:
+            timeout = game.ACTION_TIMEOUT
+        except AttributeError:
+            timeout = 0
+        if not timeout or self.game is None or self.game.phase in ("LOBBY", "GAME_OVER"):
+            return None
+        return max(0, int(timeout - (time.time() - self._last_action_ts)))
+
+    def _force_action(self, seat, t, msg):
+        """Night Market: auto-play a default action for an idle human player."""
+        g = self.game
+        s = self.seats[seat]
+        gseat = s.get("game_seat")
+        if gseat is None:
+            return
+        if not all(p.connected for p in g.players):
+            return  # someone is disconnected: keep waiting for reconnect
+        ok = False
+        banner = ""
+        events = []
+        if t == "market_discard":
+            ok, banner = g.do_market_discard(gseat, msg.get("cards", []))
+        elif t == "market_draw":
+            ok, banner = g.do_market_draw(gseat, msg.get("from", "deck"))
+            if not ok and banner == "Your hand is already full":
+                ok, banner = True, ""
+                g.finish_market_turn(gseat)
+            elif ok and (len(g.players[gseat].hand) >= game.HAND_SIZE
+                         or g.draw_allow.get(gseat, 0) <= 0):
+                g.finish_market_turn(gseat)
+        elif t == "load_bag":
+            ok, banner = g.do_load(gseat, msg.get("cards", []))
+        elif t == "declare":
+            ok, banner = g.do_declare(gseat, msg.get("type"))
+        elif t == "bribe":
+            ok, banner = g.do_bribe(gseat, msg.get("gold", 0), "")
+        elif t == "inspect_decision":
+            ok, res = g.do_inspect_decision(gseat, msg.get("action", "pass"))
+            if ok:
+                events = res
+            else:
+                banner = res[0] if res else "Action failed"
+        if not ok:
+            return
+        self._last_action_ts = time.time()
+        for e in events:
+            self._broadcast({"t": "banner", "msg": e})
+        if banner:
+            pub = banner
+            if t == "market_discard":
+                pub = banner.replace("You ", f"{s['name']} ", 1)
+            elif t == "load_bag":
+                m = re.search(r"\((\d+) card", banner)
+                pub = f"{s['name']} sealed their bag ({m.group(1)} card(s))" if m else banner
+            self._broadcast({"t": "banner", "msg": pub})
+        self._broadcast_views()
+        self._drive_bots()
+
+    def _tick_timeouts(self):
+        """Night Market: auto-play default actions when the action timer elapses."""
+        while not self.stopped:
+            time.sleep(0.5)
+            try:
+                timeout = game.ACTION_TIMEOUT
+            except AttributeError:
+                timeout = 0
+            if not timeout:
+                continue
+            with self.lock:
+                g = self.game
+                if g is None or g.phase in ("LOBBY", "GAME_OVER"):
+                    continue
+                if time.time() - self._last_action_ts < timeout:
+                    continue
+                if not all(p.connected for p in g.players):
+                    continue
+                gseat = None
+                if g.phase == "MARKET":
+                    cur = g.market_current()
+                    if not self._is_bot(cur):
+                        gseat = cur
+                elif g.phase == "LOAD":
+                    pending = [i for i, p in enumerate(g.players)
+                               if i != g.sheriff and not p.bag_loaded and not self._is_bot(i)]
+                    gseat = pending[0] if pending else None
+                elif g.phase == "DECLARE":
+                    cur = g.declare_current()
+                    if not self._is_bot(cur):
+                        gseat = cur
+                elif g.phase == "INSPECT":
+                    cur = g.inspect_current()
+                    p = g.players[cur]
+                    if p.bribe is None and not self._is_bot(cur):
+                        # merchant did not offer a bribe -> auto no-bribe
+                        seat_i = next((i for i, s in enumerate(self.seats)
+                                       if s is not None and s.get("game_seat") == cur), None)
+                        if seat_i is not None:
+                            self._force_action(seat_i, "bribe", {"gold": 0})
+                            continue
+                    if p.bribe is not None and not self._is_bot(g.sheriff):
+                        gseat = g.sheriff
+                if gseat is None:
+                    continue
+                seat = next((i for i, s in enumerate(self.seats)
+                             if s is not None and s.get("game_seat") == gseat), None)
+                if seat is None:
+                    continue
+                if g.phase == "MARKET":
+                    if not self._discarded.get(gseat):
+                        self._force_action(seat, "market_discard", {"cards": []})
+                    elif g.draw_allow.get(gseat, 0) <= 0:
+                        g.finish_market_turn(gseat)
+                        self._last_action_ts = time.time()
+                        self._broadcast_views()
+                        self._drive_bots()
+                    else:
+                        self._force_action(seat, "market_draw", {"from": "deck"})
+                elif g.phase == "LOAD":
+                    hand = g.players[gseat].hand
+                    idx = [i for i, c in enumerate(hand)
+                           if not game.is_contraband(c)]
+                    pick = idx[:1] if idx else [0]
+                    self._force_action(seat, "load_bag", {"cards": pick})
+                elif g.phase == "DECLARE":
+                    bag = g.players[gseat].bag
+                    counts = {}
+                    for c in bag:
+                        if c["type"] in game.LEGAL:
+                            counts[c["type"]] = counts.get(c["type"], 0) + 1
+                    ctype = (max(counts, key=counts.get) if counts
+                             else g.rng.choice(game.LEGAL))
+                    self._force_action(seat, "declare", {"type": ctype})
+                elif g.phase == "INSPECT":
+                    self._force_action(seat, "inspect_decision", {"action": "pass"})
+            # release the lock before the next loop iteration
 
     def _broadcast_views(self):
         if self.game is None:

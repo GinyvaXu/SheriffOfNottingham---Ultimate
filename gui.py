@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """pygame UI (minimal button-only version, EN/Chinese bilingual)."""
 
 import os
@@ -252,6 +252,9 @@ class App:
         self.lobby_mods_ok = True
         self.lobby_players_mods = []
         self.lobby_mods_toast = ""
+        self.lobby_rmods_conflicts = []
+        self.bot_personality = "any"
+        self.update_scroll = 0
         self.chat_log = []
         self.banners = []
         self.selected = set()
@@ -455,6 +458,8 @@ class App:
             for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "update":
+            if ev.type == pygame.MOUSEWHEEL:
+                self.update_scroll = max(0, self.update_scroll - ev.y * 26)
             for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "game":
@@ -496,6 +501,7 @@ class App:
                 self.lobby_rules_mods = list(m.get("rules_mods") or [])
                 self.lobby_mods_ok = bool(m.get("mods_ok", True))
                 self.lobby_players_mods = list(m.get("players_mods") or [])
+                self.lobby_rmods_conflicts = list(m.get("rmods_conflicts") or [])
                 self.screen_name = "lobby"
                 self._rebuild_lobby_ui()
             elif t == "mods_mismatch":
@@ -559,24 +565,74 @@ class App:
 
     # ---------- UI building ----------
 
+    def _panel(self, surf, rect, title=None, fill=None, title_color=None):
+        """Rounded panel with border and optional header text."""
+        rect = pygame.Rect(rect)
+        pygame.draw.rect(surf, fill or COLOR_PANEL, rect, border_radius=12)
+        pygame.draw.rect(surf, (30, 24, 18), rect, 2, border_radius=12)
+        if title:
+            t = get_font(19).render(title, True, title_color or COLOR_ACCENT)
+            surf.blit(t, (rect.x + 16, rect.y + 10))
+
+    def _decor_bg(self):
+        """Shared background for menu-like screens (game screen draws its own)."""
+        self.screen.fill(COLOR_BG)
+        pygame.draw.rect(self.screen, (48, 41, 33), (0, 0, W, 10))
+        pygame.draw.rect(self.screen, (48, 41, 33), (0, H - 10, W, 10))
+        try:
+            b1 = gfx.badge(150).copy()
+            b1.set_alpha(13)
+            self.screen.blit(b1, (36, 36))
+            b2 = gfx.badge(200).copy()
+            b2.set_alpha(9)
+            self.screen.blit(b2, (W - 230, H - 230))
+        except Exception:  # noqa: BLE001 - decoration only
+            pass
+
+    def _screen_header(self, title, subtitle=None):
+        t = get_font(36).render(title, True, COLOR_ACCENT)
+        self.screen.blit(gfx.badge(30), (W // 2 - t.get_width() // 2 - 46, 44))
+        self.screen.blit(t, t.get_rect(center=(W // 2, 60)))
+        if subtitle:
+            s = get_font(15).render(subtitle, True, COLOR_DIM)
+            self.screen.blit(s, s.get_rect(center=(W // 2, 96)))
+
+    def _rule_mod_enabled(self, mod_id):
+        """True when the room's rule-mod list (or local mods) contains mod_id."""
+        for m in (self.lobby_rules_mods or []):
+            if str(m.get("id", "")).lower() == mod_id:
+                return True
+        return False
+
+    def _mod_display_name(self, mod_id):
+        for m in (self.lobby_rules_mods or []):
+            if str(m.get("id", "")).lower() == mod_id:
+                if self.lang == "zh":
+                    return m.get("name_zh") or m.get("name") or mod_id
+                return m.get("name") or mod_id
+        return mod_id
+
     def _rebuild_menu_ui(self):
         self.buttons = [
-            Button((300, 500, 150, 44), self._t("btn_create"), self._create_room_click),
-            Button((470, 500, 150, 44), self._t("btn_join"), self._join_room),
-            Button((640, 500, 100, 44), self._t("btn_quit"), lambda: setattr(self, "done", True)),
-            Button((300, 560, 150, 44), self._t("btn_mods"), self._open_mods),
-            Button((470, 560, 150, 44), self._t("btn_market"), self._open_market),
-            Button((640, 560, 150, 44), self._t("btn_update"), self._open_update),
-            Button((610, 398, 90, 36), self._t("btn_paste"), self._paste_join),
+            # Game setup panel
+            Button((170, 492, 165, 46), self._t("btn_create"), self._create_room_click),
+            Button((345, 492, 165, 46), self._t("btn_join"), self._join_room),
+            Button((520, 424, 66, 38), self._t("btn_paste"), self._paste_join),
+            # Avatar panel
+            Button((770, 410, 118, 36), self._t("btn_avatar_upload"), self._upload_avatar),
+            Button((898, 410, 118, 36), self._t("btn_avatar_clear"), self._clear_avatar),
+            # Tools grid
+            Button((470, 662, 165, 48), self._t("btn_mods"), self._open_mods),
+            Button((645, 662, 165, 48), self._t("btn_market"), self._open_market),
+            Button((470, 722, 165, 48), self._t("btn_update"), self._open_update),
+            Button((645, 722, 165, 48), self._t("btn_quit"), lambda: setattr(self, "done", True)),
             Button((W - 170, 20, 140, 40), self._t("btn_lang"), self._toggle_lang),
-            Button((750, 406, 130, 34), self._t("btn_avatar_upload"), self._upload_avatar),
-            Button((750, 448, 130, 34), self._t("btn_avatar_clear"), self._clear_avatar),
         ]
         self.avatar_buttons = []
         for i, key in enumerate(profile.BUILTIN_AVATARS):
             col, row = i % 4, i // 4
-            x = 750 + col * 62
-            y = 262 + row * 66
+            x = 770 + col * 66
+            y = 270 + row * 66
             self.avatar_buttons.append(Button(
                 (x, y, 56, 56), "",
                 lambda k=key: self._pick_avatar(k),
@@ -698,29 +754,57 @@ class App:
         if not self.lobby_rename_input.text.strip() and self.name:
             self.lobby_rename_input.text = self.name
         bots = [j for j in joined if j.get("bot")]
+        # Estimate where the right-panel "host settings" section starts.
+        ry = 132
+        n_mods = len(self.lobby_rules_mods or [])
+        ry += (n_mods if n_mods > 0 else 1) * 19
+        ry += (max(0, n_mods - 8)) * 19
+        if self.lobby_rmods_conflicts:
+            ry += 21
+        ry += 17 * len(self.lobby_players_mods or [])
+        if self.lobby_mods_toast:
+            ry += 17
+        self.lobby_host_y = ry + 26
+        hy = self.lobby_host_y
         if self.is_host:
-            self.buttons.append(Button((W // 2 - 130, 610, 260, 46), self._t("btn_start"),
+            self.rounds_input.rect = pygame.Rect(670, hy + 52, 110, 34)
+            self.lobby_rename_input.rect = pygame.Rect(670, hy + 294, 240, 34)
+            self.buttons.append(Button((920, hy + 294, 110, 34), self._t("btn_rename"),
+                                       self._rename_click))
+            # Bottom action bar (host)
+            self.buttons.append(Button((400, 700, 230, 46), self._t("btn_start"),
                                        self._start_game_click, enabled=can_start))
-            self.buttons.append(Button((W // 2 - 130, 665, 260, 44), self._t("btn_copy"), self._copy_lan))
-            bx = W // 2 + 120
+            self.buttons.append(Button((650, 700, 150, 46), self._t("btn_copy"), self._copy_lan))
+            self.buttons.append(Button((820, 700, 150, 46), self._t("btn_leave"),
+                                       lambda: setattr(self, "done", True)))
+            # Bots: difficulty row
             can_add = len(joined) < int(info.get("max_players", 9))
-            self.buttons.append(Button((bx, 350, 180, 36), self._t("btn_add_easy"),
-                                       lambda: self._add_bot("easy"), enabled=can_add))
-            self.buttons.append(Button((bx, 394, 180, 36), self._t("btn_add_normal"),
-                                       lambda: self._add_bot("normal"), enabled=can_add))
-            self.buttons.append(Button((bx, 438, 180, 36), self._t("btn_add_hard"),
-                                       lambda: self._add_bot("hard"), enabled=can_add))
-            self.buttons.append(Button((bx, 482, 180, 36), self._t("btn_remove_bot"),
+            for i, lvl in enumerate(("easy", "normal", "hard")):
+                self.buttons.append(Button(
+                    (670 + i * 118, hy + 146, 112, 34),
+                    self._t("btn_add_" + lvl),
+                    lambda l=lvl: self._add_bot(l), enabled=can_add))
+            self.buttons.append(Button((1024, hy + 146, 112, 34), self._t("btn_remove_bot"),
                                        self._remove_bot_click, enabled=bool(bots)))
-        self.buttons.append(Button((W // 2 - 130, 610 if not self.is_host else 720, 260, 44),
-                                   self._t("btn_leave"), lambda: setattr(self, "done", True)))
+            # Bots: personality row
+            for i, p in enumerate(("any", "paranoid", "greedy", "honest", "reckless")):
+                self.buttons.append(Button(
+                    (670 + i * 100, hy + 220, 94, 34),
+                    self._t("pers_" + p),
+                    lambda p=p: self._set_bot_personality(p),
+                    highlight=(self.bot_personality == p)))
+        else:
+            self.lobby_rename_input.rect = pygame.Rect(670, hy + 24, 240, 34)
+            self.buttons.append(Button((920, hy + 24, 110, 34), self._t("btn_rename"),
+                                       self._rename_click))
+            self.buttons.append(Button((470, 700, 340, 46), self._t("btn_leave"),
+                                       lambda: setattr(self, "done", True)))
         if not self.is_host and not self.lobby_mods_ok and self.lobby_rules_mods:
             installing = self.market_state in ("loading", "installing")
-            self.buttons.append(Button((W // 2 + 120, 560, 220, 40),
+            self.buttons.append(Button((670, 208, 270, 34),
                                        self._t("btn_install_rule_mods"),
                                        self._install_missing_rule_mods,
                                        enabled=not installing))
-        self.buttons.append(Button((W // 2 - 50, 480, 120, 40), self._t("btn_rename"), self._rename_click))
         self.buttons.append(Button((W - 170, 20, 140, 40), self._t("btn_lang"), self._toggle_lang))
 
     def _pm_mods_ok(self, pm):
@@ -788,8 +872,13 @@ class App:
             self.lobby_rename_input.text = ""
             self._append_chat(self._t("rename_done", name=new), COLOR_GREEN)
 
+    def _set_bot_personality(self, p):
+        self.bot_personality = p
+        self._rebuild_lobby_ui()
+
     def _add_bot(self, level):
-        self._send({"t": "add_bot", "level": level})
+        self._send({"t": "add_bot", "level": level,
+                    "personality": self.bot_personality if self.bot_personality != "any" else None})
 
     def _remove_bot_click(self):
         joined = (self.lobby or {}).get("joined", [])
@@ -1053,10 +1142,7 @@ class App:
                                        highlight=True))
 
     def _draw_mods(self):
-        title = get_font(36).render(self._t("mods_title"), True, COLOR_ACCENT)
-        self.screen.blit(title, title.get_rect(center=(W // 2, 60)))
-        hint = get_font(15).render(self._t("mods_hint"), True, COLOR_DIM)
-        self.screen.blit(hint, hint.get_rect(center=(W // 2, 94)))
+        self._screen_header(self._t("mods_title"), self._t("mods_hint"))
         path = mods.effective_mods_base()
         ptext = get_font(15).render(self._t("mods_path", s=path), True, COLOR_GOLD)
         self.screen.blit(ptext, (60, 112))
@@ -1172,10 +1258,7 @@ class App:
                                        highlight=True))
 
     def _draw_market(self):
-        title = get_font(36).render(self._t("market_title"), True, COLOR_ACCENT)
-        self.screen.blit(title, title.get_rect(center=(W // 2, 60)))
-        hint = get_font(15).render(self._t("market_hint"), True, COLOR_DIM)
-        self.screen.blit(hint, hint.get_rect(center=(W // 2, 94)))
+        self._screen_header(self._t("market_title"), self._t("market_hint"))
         rh = get_font(15).render(self._t("market_restart_hint"), True, COLOR_GOLD)
         self.screen.blit(rh, rh.get_rect(center=(W // 2, 116)))
         if self.market_state in ("loading",):
@@ -1294,6 +1377,7 @@ class App:
 
     def _rebuild_update_ui(self):
         self.buttons = []
+        self.update_scroll = 0
         st = self.update_state
         if st in ("idle", "uptodate", "error"):
             self.buttons.append(Button((60, 700, 180, 44), self._t("update_check"),
@@ -1310,56 +1394,80 @@ class App:
                                    self._back_to_menu))
 
     def _draw_update(self):
-        title = get_font(36).render(self._t("update_title"), True, COLOR_ACCENT)
-        self.screen.blit(title, title.get_rect(center=(W // 2, 60)))
+        self._screen_header(self._t("update_title"))
         cur = self._t("update_current", v=version.__version__)
         t = get_font(18).render(cur, True, COLOR_TEXT)
-        self.screen.blit(t, (W // 2 - 300, 120))
+        self.screen.blit(t, (W // 2 - 340, 120))
         st = self.update_state
         info = self.update_info or {}
-        cx = W // 2 - 300
+        cx = W // 2 - 340
         if st == "checking":
             t = get_font(24).render(self._t("update_checking"), True, COLOR_DIM)
-            self.screen.blit(t, (cx, 180))
+            self.screen.blit(t, (cx, 170))
         elif st == "uptodate":
-            t = get_font(24).render(self._t("update_uptodate", v=info.get("current", version.__version__)),
-                                    True, COLOR_GREEN)
-            self.screen.blit(t, (cx, 180))
+            t = get_font(24).render(
+                self._t("update_uptodate", v=info.get("current", version.__version__)),
+                True, COLOR_GREEN)
+            self.screen.blit(t, (cx, 170))
         elif st == "available":
             t = get_font(24).render(self._t("update_available", v=info.get("version", "")),
                                     True, COLOR_ACCENT)
-            self.screen.blit(t, (cx, 180))
+            self.screen.blit(t, (cx, 170))
         elif st == "downloading":
             pct = max(0, min(100, int(self.update_progress)))
-            t = get_font(24).render(self._t("update_downloading", p=pct), True, COLOR_ACCENT)
-            self.screen.blit(t, (cx, 180))
-            pygame.draw.rect(self.screen, COLOR_PANEL, (cx, 230, 600, 24), border_radius=6)
+            t = get_font(24).render(self._t("update_downloading", p=pct),
+                                    True, COLOR_ACCENT)
+            self.screen.blit(t, (cx, 170))
+            pygame.draw.rect(self.screen, COLOR_PANEL, (cx, 220, 680, 24), border_radius=6)
             if pct > 0:
-                pygame.draw.rect(self.screen, COLOR_GOLD, (cx, 230, max(6, int(600 * pct / 100)), 24),
+                pygame.draw.rect(self.screen, COLOR_GOLD, (cx, 220, max(6, int(680 * pct / 100)), 24),
                                  border_radius=6)
         elif st == "downloaded":
             t = get_font(24).render(self._t("update_downloaded"), True, COLOR_GREEN)
-            self.screen.blit(t, (cx, 180))
+            self.screen.blit(t, (cx, 170))
         elif st == "installing":
             t = get_font(24).render(self._t("update_installing"), True, COLOR_GREEN)
-            self.screen.blit(t, (cx, 180))
+            self.screen.blit(t, (cx, 170))
         elif st == "error":
-            t = get_font(22).render(self._t("update_error", e=self.update_error), True, COLOR_RED)
-            self.screen.blit(t, (cx, 180))
+            t = get_font(22).render(self._t("update_error", e=self.update_error),
+                                    True, COLOR_RED)
+            self.screen.blit(t, (cx, 170))
         if not updater.is_frozen():
             t = get_font(16).render(self._t("update_src_hint"), True, COLOR_DIM)
-            self.screen.blit(t, (cx, 264))
+            self.screen.blit(t, (cx, 262))
         notes = (info or {}).get("notes", "")
         if notes and st in ("available", "downloaded", "installing"):
-            self._draw_block(self.screen, self._t("update_notes") + notes[:260], cx, 320,
-                             get_font(17), COLOR_DIM, 620)
+            ver = info.get("version", "")
+            self._panel(self.screen, (cx, 300, 680, 340))
+            hd = get_font(18).render(self._t("update_changelog", v=ver),
+                                     True, COLOR_ACCENT)
+            self.screen.blit(hd, (cx + 16, 310))
+            area = pygame.Rect(cx + 12, 342, 656, 290)
+            self.screen.set_clip(area)
+            lines = self._wrap_text(notes, get_font(17), area.width - 8)
+            total_h = len(lines) * 25
+            max_scroll = max(0, total_h - area.height + 6)
+            self.update_scroll = min(self.update_scroll, max_scroll)
+            yy = area.y + 4 - self.update_scroll
+            for ln in lines:
+                t = get_font(17).render(ln, True, COLOR_TEXT)
+                self.screen.blit(t, (area.x + 4, yy))
+                yy += 25
+            self.screen.set_clip(None)
+            if max_scroll > 0:
+                hint = get_font(13).render(self._t("update_scroll_hint"),
+                                           True, COLOR_DIM)
+                self.screen.blit(hint, (area.right - hint.get_width(), area.bottom + 6))
         for b in self.buttons:
             b.draw(self.screen)
 
     # ---------- Drawing ----------
 
     def draw(self):
-        self.screen.fill(COLOR_BG)
+        if self.screen_name == "game":
+            self.screen.fill(COLOR_BG)
+        else:
+            self._decor_bg()
         if self.screen_name == "menu":
             self._draw_menu()
         elif self.screen_name == "mods":
@@ -1376,112 +1484,146 @@ class App:
             self._draw_over()
 
     def _draw_menu(self):
-        title = get_font(44).render(self._t("title"), True, COLOR_ACCENT)
-        self.screen.blit(gfx.title_logo(56),
-                         (W // 2 - title.get_width() // 2 - 76, 100 - 30))
-        self.screen.blit(title, title.get_rect(center=(W // 2, 100)))
-        sub = get_font(20).render(self._t("subtitle"), True, COLOR_DIM)
-        self.screen.blit(sub, sub.get_rect(center=(W // 2, 142)))
-        sy = 164
+        title = get_font(46).render(self._t("title"), True, COLOR_ACCENT)
+        self.screen.blit(gfx.title_logo(64),
+                         (W // 2 - title.get_width() // 2 - 86, 56))
+        self.screen.blit(title, title.get_rect(center=(W // 2, 88)))
+        sub = get_font(19).render(self._t("subtitle"), True, COLOR_DIM)
+        self.screen.blit(sub, sub.get_rect(center=(W // 2, 132)))
+        sy = 160
         if self.mod_names:
-            t = get_font(16).render(self._t("mods_line", s=", ".join(self.mod_names)),
+            t = get_font(15).render(self._t("mods_line", s=", ".join(self.mod_names)),
                                     True, COLOR_GOLD)
             self.screen.blit(t, t.get_rect(center=(W // 2, sy)))
-            sy += 26
+            sy += 22
         if self.mod_errors:
             t = get_font(15).render(self._t("mods_error", s="; ".join(self.mod_errors)),
                                     True, COLOR_RED)
             self.screen.blit(t, t.get_rect(center=(W // 2, sy)))
-            sy += 26
+            sy += 22
         if self.update_banner:
-            t = get_font(16).render(self.update_banner, True, COLOR_GREEN)
+            t = get_font(15).render(self.update_banner, True, COLOR_GREEN)
             self.screen.blit(t, t.get_rect(center=(W // 2, sy)))
+        # Two-column cards
+        self._panel(self.screen, (140, 196, 460, 430), self._t("menu_entry"))
+        self._panel(self.screen, (630, 196, 510, 430), self._t("menu_avatar"))
         for lbl, inp in [(self._t("lbl_name"), self.name_input),
                          (self._t("lbl_players"), self.players_input),
                          (self._t("lbl_join"), self.join_input)]:
-            t = get_font(20).render(lbl, True, COLOR_TEXT)
-            self.screen.blit(t, (160, inp.rect.y - 26))
+            t = get_font(18).render(lbl, True, COLOR_TEXT)
+            self.screen.blit(t, (170, inp.rect.y - 26))
             inp.draw(self.screen)
         if self.menu_note:
-            t = get_font(16).render(self.menu_note, True, COLOR_DIM)
-            self.screen.blit(t, (160, 468))
-        # Avatar picker
-        t = get_font(20).render(self._t("lbl_avatar"), True, COLOR_TEXT)
-        self.screen.blit(t, (640, 220))
+            t = get_font(15).render(self.menu_note, True, COLOR_DIM)
+            self.screen.blit(t, (170, 556))
         hint = get_font(14).render(self._t("avatar_hint"), True, COLOR_DIM)
-        self.screen.blit(hint, (640, 246))
+        self.screen.blit(hint, (660, 234))
         preview = gfx.avatar_surface(self._avatar_payload(), 72)
-        pygame.draw.circle(self.screen, COLOR_GOLD, (696, 356), 44, 3)
-        self.screen.blit(preview, (660, 320))
+        pygame.draw.circle(self.screen, COLOR_GOLD, (700, 306), 46, 3)
+        self.screen.blit(preview, (664, 270))
         for b in self.avatar_buttons:
             b.draw(self.screen)
         self.avatar_path_input.draw(self.screen)
         if self.avatar_toast:
             t = get_font(15).render(self.avatar_toast, True, COLOR_GREEN)
-            self.screen.blit(t, (640, 492))
+            self.screen.blit(t, (770, 502))
         for b in self.buttons:
             b.draw(self.screen)
 
     def _draw_lobby(self):
-        title = get_font(36).render(self._t("lobby_title"), True, COLOR_ACCENT)
-        self.screen.blit(title, title.get_rect(center=(W // 2, 70)))
+        self._screen_header(self._t("lobby_title"))
         info = self.lobby or {}
         joined = info.get("joined", [])
+        # Left card: players
+        self._panel(self.screen, (110, 96, 500, 560), self._t("lobby_players"))
+        y = 132
         for i, j in enumerate(joined):
+            av = gfx.avatar_surface(j.get("avatar") or self._avatar_payload(), 40)
+            self.screen.blit(av, (130, y + 3))
             tag = self._t("host_tag") if j.get("host") else ""
             if j.get("bot"):
-                tag += self._t("bot_tag", l=self._t("lvl_" + str(j["bot"]))) + " "
-            av = gfx.avatar_surface(j.get("avatar") or self._avatar_payload(), 32)
-            self.screen.blit(av, (W // 2 - 246, 120 + i * 40 + 2))
-            t = get_font(24).render(f"{i + 1}. {tag}{j['name']}", True, COLOR_TEXT)
-            self.screen.blit(t, (W // 2 - 200, 120 + i * 40))
-        cnt_y = 120 + max(len(joined), 1) * 40 + 8
-        cnt = self._t("joined", n=len(joined), m=info.get("max_players", "?"))
-        t = get_font(20).render(cnt, True, COLOR_DIM)
-        self.screen.blit(t, (W // 2 - 200, cnt_y))
-        y = cnt_y + 36
-        for idx, (key, kw) in enumerate(self.server_info):
-            t = get_font(18).render(self._t(key, **kw), True, COLOR_DIM)
-            self.screen.blit(t, (W // 2 - 200, y + idx * 24))
-        hint = get_font(15).render(self._t("rule_hint"), True, COLOR_GOLD)
-        self.screen.blit(hint, (W // 2 - 200, y + len(self.server_info) * 24 + 6))
-        ry = y + len(self.server_info) * 24 + 30
-        t = get_font(16).render(self._t("rmods_title"), True, COLOR_ACCENT)
-        self.screen.blit(t, (W // 2 - 200, ry)); ry += 24
+                tag += self._t("bot_tag", l=self._t("lvl_" + str(j.get("bot") or "normal")))
+            nm = get_font(21).render("{0}. {1}{2}".format(i + 1, tag, j["name"]),
+                                     True, COLOR_TEXT)
+            self.screen.blit(nm, (180, y + 7))
+            p = j.get("personality")
+            if p in ("paranoid", "greedy", "honest", "reckless"):
+                pt = get_font(14).render(self._t("pers_tag", p=self._t("pers_" + p)),
+                                         True, COLOR_GOLD)
+                self.screen.blit(pt, (180 + nm.get_width() + 8, y + 11))
+            pygame.draw.line(self.screen, (50, 42, 34), (130, y + 46), (590, y + 46))
+            y += 52
+        t = get_font(18).render(self._t("joined", n=len(joined),
+                                        m=info.get("max_players", "?")), True, COLOR_DIM)
+        self.screen.blit(t, (130, y + 8))
+        y += 34
+        for key, kw in self.server_info:
+            t = get_font(17).render(self._t(key, **kw), True, COLOR_DIM)
+            self.screen.blit(t, (130, y))
+            y += 24
+        t = get_font(15).render(self._t("rule_hint"), True, COLOR_GOLD)
+        self.screen.blit(t, (130, 626))
+        # Right card: rule mods + settings
+        self._panel(self.screen, (650, 96, 520, 560), self._t("lobby_rules"))
+        ry = 132
         rmods = self.lobby_rules_mods or []
         if not rmods:
             t = get_font(15).render(self._t("rmods_none"), True, COLOR_DIM)
-            self.screen.blit(t, (W // 2 - 200, ry)); ry += 22
+            self.screen.blit(t, (670, ry))
+            ry += 19
         else:
-            for m in rmods:
-                nm = (m.get("name_zh") or m.get("name") or m.get("id"))
-                if self.lang != "zh":
-                    nm = m.get("name") or m.get("id")
-                t = get_font(15).render("- {0}  v{1}".format(nm, m.get("version", "?")), True, COLOR_TEXT)
-                self.screen.blit(t, (W // 2 - 200, ry)); ry += 20
+            shown = rmods[:8]
+            for m in shown:
+                nm = ((m.get("name_zh") or m.get("name") or m.get("id"))
+                      if self.lang == "zh" else (m.get("name") or m.get("id")))
+                t = get_font(15).render("- {0}  v{1}".format(nm, m.get("version", "?")),
+                                        True, COLOR_TEXT)
+                self.screen.blit(t, (670, ry))
+                ry += 19
+            if len(rmods) > 8:
+                t = get_font(14).render(self._t("mods_more", n=len(rmods) - 8),
+                                        True, COLOR_DIM)
+                self.screen.blit(t, (670, ry))
+                ry += 19
+        if self.lobby_rmods_conflicts:
+            names = ", ".join(self._mod_display_name(a) + " x " + self._mod_display_name(b)
+                              for a, b in self.lobby_rmods_conflicts)
+            t = get_font(14).render(self._t("rmods_conflict", s=names), True, COLOR_RED)
+            self.screen.blit(t, (670, ry))
+            ry += 21
         for pm in self.lobby_players_mods:
             ok = self._pm_mods_ok(pm)
             col = COLOR_GREEN if ok else COLOR_RED
             txt = "{0}  {1}".format(pm.get("name", "?"),
                                     self._t("rmods_ok") if ok else self._t("rmods_missing"))
             t = get_font(14).render(txt, True, col)
-            self.screen.blit(t, (W // 2 - 200, ry)); ry += 18
+            self.screen.blit(t, (670, ry))
+            ry += 17
         if self.lobby_mods_toast:
             t = get_font(14).render(self.lobby_mods_toast, True, COLOR_GOLD)
-            self.screen.blit(t, (W // 2 - 200, ry))
-        # rename
-        t = get_font(18).render(self._t("lbl_name"), True, COLOR_TEXT)
-        self.screen.blit(t, (W // 2 - 260, 446))
-        self.lobby_rename_input.draw(self.screen)
-        # rounds (host only)
+            self.screen.blit(t, (670, ry))
+            ry += 17
+        pygame.draw.line(self.screen, (50, 42, 34), (670, ry + 8), (1150, ry + 8), 2)
+        hy = getattr(self, "lobby_host_y", 220)
         if self.is_host:
-            t = get_font(18).render(self._t("lbl_rounds"), True, COLOR_TEXT)
-            self.screen.blit(t, (W // 2 - 260, 512))
+            t = get_font(18).render(self._t("lobby_host"), True, COLOR_ACCENT)
+            self.screen.blit(t, (670, hy))
+            t = get_font(16).render(self._t("lbl_rounds"), True, COLOR_TEXT)
+            self.screen.blit(t, (670, hy + 28))
             self.rounds_input.draw(self.screen)
-            t = get_font(20).render(self._t("bots_title"), True, COLOR_ACCENT)
-            self.screen.blit(t, (W // 2 + 120, 300))
+            t = get_font(18).render(self._t("bots_title"), True, COLOR_ACCENT)
+            self.screen.blit(t, (670, hy + 102))
             t = get_font(14).render(self._t("bots_hint"), True, COLOR_DIM)
-            self.screen.blit(t, (W // 2 + 120, 326))
+            self.screen.blit(t, (670, hy + 124))
+            t = get_font(15).render(self._t("pers_title"), True, COLOR_TEXT)
+            self.screen.blit(t, (670, hy + 196))
+            t = get_font(16).render(self._t("lbl_name"), True, COLOR_TEXT)
+            self.screen.blit(t, (670, hy + 270))
+            self.lobby_rename_input.draw(self.screen)
+        else:
+            t = get_font(16).render(self._t("lbl_name"), True, COLOR_TEXT)
+            self.screen.blit(t, (670, hy))
+            self.lobby_rename_input.draw(self.screen)
         for b in self.buttons:
             b.draw(self.screen)
 
@@ -1512,6 +1654,44 @@ class App:
         self.screen.blit(gfx.card_back(36, 52), (20, 42))
         self.screen.blit(t, (64, 46))
 
+        # Rule-mod chips: trade route / bribe pot / action timer / guild contracts
+        chips = []
+        if v.get("route") and self._rule_mod_enabled("trade_caravans"):
+            chips.append((self._t("chip_route_bonus", t=self._tn(v["route"]),
+                                  g=game.ROUTE_BONUS), COLOR_GOLD))
+        if self._rule_mod_enabled("bribe_pot"):
+            chips.append((self._t("chip_pot", g=v.get("pot", 0)), COLOR_GOLD))
+        tl = v.get("time_left")
+        if tl is not None and self._rule_mod_enabled("night_market"):
+            chips.append((self._t("chip_time", s=tl),
+                          COLOR_RED if tl <= 10 else COLOR_GREEN))
+        if self._rule_mod_enabled("guild_contracts"):
+            youc = (v.get("you") or {}).get("contracts") or []
+            if youc:
+                legal = {}
+                me_pub = {}
+                if self.my_seat is not None and v.get("players"):
+                    me_pub = v["players"][self.my_seat] or {}
+                for k, cnt in (me_pub.get("stand_legal") or {}).items():
+                    legal[k] = cnt
+                for c in (v.get("you") or {}).get("stand_contra") or []:
+                    if c.get("royal") and c.get("of"):
+                        legal[c["of"]] = legal.get(c["of"], 0) + int(c.get("equals") or 2)
+                for ct in youc:
+                    have = legal.get(ct["type"], 0)
+                    chips.append((self._t("contracts_chip", t=self._tn(ct["type"]),
+                                          n=min(have, ct["need"]), m=ct["need"]),
+                                  COLOR_GREEN if have >= ct["need"] else COLOR_TEXT))
+        if chips:
+            cx = 864
+            for text, col in reversed(chips):
+                t = get_font(14).render(text, True, col)
+                w = t.get_width() + 16
+                cx -= w
+                pygame.draw.rect(self.screen, (56, 48, 38), (cx, 38, w, 24),
+                                 border_radius=12)
+                self.screen.blit(t, (cx + 8, 41))
+
         # Player panels (multi-line nameplates)
         plist = v.get("players", [])
         n = len(plist)
@@ -1537,6 +1717,14 @@ class App:
             self.screen.blit(gfx.coin(16), (x + 8, yy + 2))
             t = get_font(15).render(gold, True, COLOR_TEXT)
             self.screen.blit(t, (x + 26, yy)); yy += 20
+            if self._rule_mod_enabled("merchant_reputation") and p.get("reputation"):
+                t = get_font(13).render(self._t("rep_chip", n=p["reputation"]),
+                                        True, COLOR_GOLD)
+                self.screen.blit(t, (x + pw - t.get_width() - 6, py + 46))
+            if self._rule_mod_enabled("royal_favor") and p.get("royal_favor"):
+                t = get_font(13).render(self._t("favor_chip", n=p["royal_favor"]),
+                                        True, COLOR_GOLD)
+                self.screen.blit(t, (x + pw - t.get_width() - 6, py + 64))
             if not p.get("connected", True):
                 t = get_font(15).render(self._t("offline_tag"), True, COLOR_RED)
                 self.screen.blit(t, (x + 8, yy)); yy += 20
@@ -1741,6 +1929,10 @@ class App:
                             tag = self._t("place1" if k == 0 else "place2")
                             parts.append(f"{tag} {a['name']}+{a['bonus']}")
                         head = self._tn(e["type"])
+                    elif e["kind"] == "pot":
+                        for a in e["awards"]:
+                            parts.append(f"{a['name']}+{a['bonus']}")
+                        head = self._t("over_pot")
                     else:  # black market cards
                         for a in e["awards"]:
                             parts.append(f"{a['name']}+{a['bonus']}")

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """UI text and server-message translation (English is the canonical wire language)."""
 
 import re
@@ -13,6 +13,7 @@ TYPE_ZH = {
     "ROYAL_RYE_BREAD": "\u9ed1\u9ea6\u9762\u5305", "ROYAL_COARSE_BREAD": "\u7c97\u7cae\u9762\u5305",
     "ROYAL_CHICKEN": "\u7687\u5bb6\u9e21\u8089",
     "BLACK_MARKET": "\u9ed1\u5e02",
+    "POT": "\u8d4f\u91d1\u6c60",
 }
 
 PHASES = {
@@ -216,6 +217,33 @@ UI = {
         "lvl_hard": "Hard",
         "mods_line": "Mods: {s}",
         "mods_error": "Mod error: {s}",
+
+        "pers_any": "Any",
+        "pers_paranoid": "Paranoid",
+        "pers_greedy": "Greedy",
+        "pers_honest": "Honest",
+        "pers_reckless": "Reckless",
+        "pers_tag": " [{p}]",
+        "menu_entry": "Game Setup",
+        "menu_avatar": "Avatar",
+        "menu_tools": "Tools",
+        "lobby_players": "Players",
+        "lobby_rules": "Rule Mods",
+        "lobby_host": "Host Settings",
+        "rmods_conflict": "Incompatible rule mods: {s}",
+        "chip_route": "Route: {t}",
+        "chip_route_bonus": "Route: {t} +{g}g",
+        "chip_pot": "Pot: {g}",
+        "chip_time": "{s}s",
+        "rep_chip": "Rep {n}",
+        "favor_chip": "Favor {n}",
+        "contracts_chip": "{t} {n}/{m}",
+        "update_changelog": "What's new in v{v}:",
+        "update_scroll_hint": "Mouse wheel scrolls the notes",
+        "over_pot": "Bribe pot",
+
+        "pers_title": "Bot personality",
+        "pers_hint": "Pick a personality, then a difficulty to add the bot",
     },
     "zh": {
         "title": "\u8bfa\u4e01\u6c49\u8b66\u957f - \u6781\u7b80\u8054\u673a\u7248",
@@ -412,6 +440,33 @@ UI = {
         "lvl_hard": "\u56f0\u96be",
         "mods_line": "\u6a21\u7ec4\uff1a{s}",
         "mods_error": "\u6a21\u7ec4\u9519\u8bef\uff1a{s}",
+
+
+        "pers_title": "\u4eba\u673a\u4eba\u683c",
+        "pers_hint": "\u5148\u9009\u4eba\u683c\uff0c\u518d\u9009\u96be\u5ea6\u6dfb\u52a0\u4eba\u673a",
+        "pers_any": "\u968f\u673a",
+        "pers_paranoid": "\u591a\u7591",
+        "pers_greedy": "\u8d2a\u5a6a",
+        "pers_honest": "\u5b88\u6cd5",
+        "pers_reckless": "\u8c6a\u8d4c",
+        "pers_tag": "\u3010{p}\u3011",
+        "menu_entry": "\u6e38\u620f\u8bbe\u7f6e",
+        "menu_avatar": "\u5934\u50cf",
+        "menu_tools": "\u5de5\u5177",
+        "lobby_players": "\u73a9\u5bb6",
+        "lobby_rules": "\u73a9\u6cd5\u6a21\u7ec4",
+        "lobby_host": "\u623f\u4e3b\u8bbe\u7f6e",
+        "rmods_conflict": "\u4e0d\u517c\u5bb9\u7684\u73a9\u6cd5\u6a21\u7ec4\uff1a{s}",
+        "chip_route": "\u5546\u8def\uff1a{t}",
+        "chip_route_bonus": "\u5546\u8def\uff1a{t} +{g}\u91d1\u5e01",
+        "chip_pot": "\u8d4f\u91d1\u6c60\uff1a{g}",
+        "chip_time": "{s}\u79d2",
+        "rep_chip": "\u58f0\u671b {n}",
+        "favor_chip": "\u6069\u5ba0 {n}",
+        "contracts_chip": "{t} {n}/{m}",
+        "update_changelog": "v{v} \u66f4\u65b0\u8be6\u60c5\uff1a",
+        "update_scroll_hint": "\u6eda\u8f6e\u53ef\u6eda\u52a8\u66f4\u65b0\u8bf4\u660e",
+        "over_pot": "\u8d4f\u91d1\u6c60",
     },
 }
 

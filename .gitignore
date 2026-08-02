@@ -20,3 +20,9 @@ smoke2*.png
 .idea/
 Thumbs.db
 .DS_Store
+
+# local verification screenshots
+smoke3*/
+smoke3_*.png
+smoke3_*.txt
+s3*.txt

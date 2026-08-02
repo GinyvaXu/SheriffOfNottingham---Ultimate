@@ -11,10 +11,53 @@ import game
 
 LEVELS = ("easy", "normal", "hard")
 
+# Personality tags (client/host side only, no server-consistency requirement).
+# Each personality adjusts the decision weights of its difficulty level.
+PERSONALITIES = ("paranoid", "greedy", "honest", "reckless")
+PERSONALITY_LABELS = {
+    "paranoid": {"en": "Paranoid", "zh": "\u591a\u7591"},
+    "greedy": {"en": "Greedy", "zh": "\u8d2a\u5a6a"},
+    "honest": {"en": "Honest", "zh": "\u5b88\u6cd5"},
+    "reckless": {"en": "Reckless", "zh": "\u8c6a\u8d4c"},
+}
 
-def bot_name(level, num=None):
+# Personality deltas applied on top of the difficulty defaults.
+# inspect_bias:     sheriff extra chance to inspect
+# contra_ratio:    multiplier on the number of contraband loaded
+# bribe_tendency:  multiplier on bribe probability / amounts
+# bluff_rate:      extra chance to load more cards than declared intent
+_PERSONALITY_DELTAS = {
+    "paranoid":  {"inspect_bias": 0.30, "contra_ratio": 0.70, "bribe_tendency": 1.10, "bluff_rate": 0.90},
+    "greedy":    {"inspect_bias": -0.10, "contra_ratio": 1.25, "bribe_tendency": 1.35, "bluff_rate": 1.20},
+    "honest":    {"inspect_bias": 0.10, "contra_ratio": 0.35, "bribe_tendency": 0.60, "bluff_rate": 0.60},
+    "reckless":  {"inspect_bias": -0.20, "contra_ratio": 1.60, "bribe_tendency": 1.15, "bluff_rate": 1.50},
+}
+
+# Difficulty defaults (kept inside the module so levels stay comparable).
+_DEFAULT_PARAMS = {
+    "easy":   {"inspect_bias": 0.00, "contra_ratio": 0.15, "bribe_tendency": 0.30, "bluff_rate": 0.20},
+    "normal": {"inspect_bias": 0.00, "contra_ratio": 0.55, "bribe_tendency": 0.60, "bluff_rate": 0.45},
+    "hard":   {"inspect_bias": 0.00, "contra_ratio": 0.80, "bribe_tendency": 0.85, "bluff_rate": 0.70},
+}
+
+
+def bot_params(level, personality=None):
+    """Merged decision parameters for a level + optional personality."""
+    base = dict(_DEFAULT_PARAMS.get(level, _DEFAULT_PARAMS["normal"]))
+    if personality:
+        delta = _PERSONALITY_DELTAS.get(personality)
+        if delta:
+            for k, v in delta.items():
+                base[k] = max(0.0, min(1.5, base[k] * v if k != "inspect_bias" else base[k] + v))
+    return base
+
+
+def bot_name(level, num=None, personality=None):
     """Wire name for a bot seat (num differentiates same-level bots)."""
     base = "Bot-" + level.capitalize()
+    if personality:
+        label = PERSONALITY_LABELS.get(personality, {}).get("en", personality)
+        base = f"{base} ({label})"
     return base if num is None else f"{base} {num}"
 
 
@@ -61,10 +104,11 @@ def choose_discard(g, seat, level):
 
 # ---------- Load bag: which hand cards go into the bag ----------
 
-def choose_load(g, seat, level):
+def choose_load(g, seat, level, personality=None):
     """Return hand indices (1-5) to smuggle this round."""
     hand = g.players[seat].hand
     rng = g.rng
+    params = bot_params(level, personality)
     quest = set(g.quest_types)
     legal = [i for i, c in enumerate(hand) if not game.is_contraband(c)]
     contra = [i for i, c in enumerate(hand) if game.is_contraband(c)]
@@ -79,8 +123,10 @@ def choose_load(g, seat, level):
     contra.sort(key=ckey)
     legal.sort(key=lambda i: -hand[i]["value"])
 
-    max_contra = {"easy": 1, "normal": 2, "hard": 4}[level]
-    p_smuggle = {"easy": 0.15, "normal": 0.55, "hard": 0.80}[level]
+    max_contra = max(0, min(len(contra), int(round({"easy": 1, "normal": 2, "hard": 4}[level]
+                                                   * params["contra_ratio"]))))
+    p_smuggle = min(1.0, {"easy": 0.15, "normal": 0.55, "hard": 0.80}[level]
+                    * params["contra_ratio"])
     want = {"easy": rng.randint(1, 3), "normal": rng.randint(2, 4),
             "hard": rng.randint(3, 5)}[level]
     if not contra:
@@ -126,29 +172,30 @@ def choose_declare(g, seat, level):
 
 # ---------- Bribe ----------
 
-def choose_bribe(g, seat, level):
+def choose_bribe(g, seat, level, personality=None):
     """Return (gold, msg) the merchant offers; gold 0 means no bribe."""
     p = g.players[seat]
     rng = g.rng
+    params = bot_params(level, personality)
     has_contra = any(game.is_contraband(c) for c in p.bag)
     gold = 0
     if level == "easy":
-        if has_contra and rng.random() < 0.30:
+        if has_contra and rng.random() < min(1.0, 0.30 * params["bribe_tendency"]):
             gold = rng.randint(1, 3)
-        elif rng.random() < 0.10:
+        elif rng.random() < min(1.0, 0.10 * params["bribe_tendency"]):
             gold = rng.randint(1, 2)
     elif level == "normal":
         if has_contra:
-            if rng.random() < 0.60:
+            if rng.random() < min(1.0, 0.60 * params["bribe_tendency"]):
                 gold = rng.randint(3, 8)
-        elif rng.random() < 0.30:
+        elif rng.random() < min(1.0, 0.30 * params["bribe_tendency"]):
             gold = rng.randint(1, 4)
     else:
         if has_contra:
             val = sum(c["value"] for c in p.bag if game.is_contraband(c))
-            if rng.random() < 0.85:
+            if rng.random() < min(1.0, 0.85 * params["bribe_tendency"]):
                 gold = rng.randint(min(6, val + 1), min(18, val + 6))
-        elif rng.random() < 0.40:
+        elif rng.random() < min(1.0, 0.40 * params["bribe_tendency"]):
             gold = rng.randint(2, 6)
     gold = max(0, min(gold, p.gold))
     return gold, ""
@@ -156,12 +203,13 @@ def choose_bribe(g, seat, level):
 
 # ---------- Sheriff: inspect or pass ----------
 
-def choose_inspect(g, sheriff_seat, level):
+def choose_inspect(g, sheriff_seat, level, personality=None):
     """Sheriff decision for the current merchant (public info only)."""
     target = g.players[g.inspect_current()]
     bribe = (target.bribe or {}).get("gold", 0)
     bag_n = len(target.bag)
     rng = g.rng
+    params = bot_params(level, personality)
     if level == "easy":
         if bag_n >= 3 and bribe <= 1:
             return "inspect"
@@ -181,6 +229,7 @@ def choose_inspect(g, sheriff_seat, level):
         thresh = 4.0
     else:
         thresh = 4.2
+    score += params["inspect_bias"] * 2.0
     score += rng.uniform(-1.0, 1.0)
     return "inspect" if score >= thresh else "pass"
 
