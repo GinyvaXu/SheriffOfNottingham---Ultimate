@@ -63,6 +63,9 @@ python main.py --host --players 4 --port 5555 --name ZhangSan
 `--players` is the seat cap, 2-5. The host clicks "Start Game" in the lobby; the game
 adjusts to however many players actually joined. In the lobby the host can set the
 number of rounds (default: each player is sheriff twice) and rename themselves.
+Everyone in the lobby (host, guests and bots) must click **Ready** before the host
+can start; joining clients must run the **same game version** as the host - the
+host rejects mismatched versions with a clear error.
 
 **Player (join):**
 ```
@@ -200,12 +203,15 @@ with Inno Setup:
 
 ## Gameplay
 
-- **Market**: choose hand cards to discard (0-5), then draw the same number back from the deck.
+- **Market**: all merchants act in parallel - each chooses hand cards to discard (0-5),
+  then draws the same number back from the deck; the phase ends when everyone is done.
 - **Load**: secretly pick 1-5 cards into your bag, then seal it.
-- **Declare**: pick a legal goods type and confirm (card count is forced = bag size; the type may be a lie).
+- **Declare**: all merchants declare in parallel (card count is forced = bag size; the type may be a lie).
 - **Inspect**: the bag owner may bribe (gold + note); the sheriff can accept it, pass,
   inspect, or **counter with a higher demand** - the merchant may then accept, reject,
   or counter again (up to 3 counter-offers per negotiation, then accept/reject only).
+  If the merchant rejects the sheriff's counter-offer, their **original bribe offer
+  still stands** (it is not voided).
 - **Chat**: bottom-right input, Enter to send; quick-chat buttons are also available.
 
 ## Game over / back to lobby
