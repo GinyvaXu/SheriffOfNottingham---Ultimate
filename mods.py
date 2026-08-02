@@ -33,6 +33,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import sys
 
 import game
@@ -144,9 +145,122 @@ def mods_base():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), MODS_DIR)
 
 
+def _is_writable_dir(path):
+    """True if we can create/delete a probe file inside ``path``."""
+    try:
+        os.makedirs(path, exist_ok=True)
+        probe = os.path.join(path, ".sheriff_write_probe")
+        with io.open(probe, "w", encoding="utf-8"):
+            pass
+        os.remove(probe)
+        return True
+    except Exception:
+        return False
+
+
+def _user_mods_base():
+    """Per-user mods folder (%APPDATA% / ~), always writable by the player."""
+    if os.name == "nt":
+        root = os.environ.get("APPDATA") or os.path.expanduser("~")
+    else:
+        root = os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(root, "SheriffOfNottingham", MODS_DIR)
+
+
+def _grant_users_write(folder):
+    """Windows: best-effort grant the Users group modify rights (ACL).
+
+    Only succeeds when the caller holds WRITE_DAC on the folder (e.g. the
+    install folder is user-owned). The installer normally fixes Program Files
+    ACLs, this is a safety net for already-installed copies.
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import subprocess
+        flags = 0
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            flags = subprocess.CREATE_NO_WINDOW
+        r = subprocess.run(
+            ["icacls", folder, "/grant", "Users:(OI)(CI)M", "/T", "/Q"],
+            capture_output=True, timeout=30, creationflags=flags)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _migrate_mods(src, dst):
+    """Copy every mod folder (folder containing mod.json) from src to dst.
+
+    Existing folders in dst are kept (never overwritten). Returns True when
+    dst is writable afterwards.
+    """
+    try:
+        os.makedirs(dst, exist_ok=True)
+        if os.path.isdir(src):
+            for name in sorted(os.listdir(src)):
+                if name.startswith((".", "_")):
+                    continue
+                src_folder = os.path.join(src, name)
+                dst_folder = os.path.join(dst, name)
+                if not os.path.isdir(src_folder):
+                    continue
+                if not os.path.isfile(os.path.join(src_folder, "mod.json")):
+                    continue
+                if os.path.isdir(dst_folder):
+                    continue
+                try:
+                    shutil.copytree(src_folder, dst_folder)
+                except Exception:
+                    pass
+        return _is_writable_dir(dst)
+    except Exception:
+        return False
+
+
+_effective_base = None
+
+
+def effective_mods_base():
+    """Resolve the mods folder actually used by the game.
+
+    Prefers the folder next to the game; if that folder is not writable
+    (typical for installs under the protected Program Files folder), tries to repair its
+    ACL, and finally falls back to a per-user folder under %APPDATA%,
+    migrating any mods found next to the game.
+    """
+    env = os.environ.get("SHERIFF_MODS_DIR")
+    if env:
+        return env
+    global _effective_base
+    if _effective_base:
+        return _effective_base
+    primary = mods_base()
+    if _is_writable_dir(primary):
+        _effective_base = primary
+        return _effective_base
+    if os.name == "nt":
+        _grant_users_write(primary)
+        if _is_writable_dir(primary):
+            _effective_base = primary
+            return _effective_base
+    alt = _user_mods_base()
+    if _migrate_mods(primary, alt):
+        _effective_base = alt
+        return _effective_base
+    _effective_base = primary
+    return _effective_base
+
+
+def reset_mods_base_cache():
+    """Forget the cached resolution (used by tests / manual refresh)."""
+    global _effective_base
+    _effective_base = None
+
+
 def discover_mods(base=None):
     """Return sorted list of enabled mod folders (manifest + path)."""
-    base = base or mods_base()
+    base = base or effective_mods_base()
     out = []
     if not os.path.isdir(base):
         return out
@@ -181,7 +295,7 @@ def list_all_mods(base=None):
 
     Used by the in-game mods management screen.
     """
-    base = base or mods_base()
+    base = base or effective_mods_base()
     out = []
     if not os.path.isdir(base):
         return out
@@ -212,27 +326,41 @@ def list_all_mods(base=None):
     return out
 
 
-def _write_json(path, data):
-    """Write JSON, tolerating a read-only file attribute (clears it)."""
+def _clear_readonly(path):
+    """Clear the read-only file attribute so the file can be rewritten."""
     try:
-        with io.open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return True
-    except (PermissionError, OSError):
+        import stat as statmod
+        st = os.stat(path)
+        os.chmod(path, st.st_mode | statmod.S_IWRITE)
+    except Exception:
+        pass
+
+
+def _write_json(path, data):
+    """Write JSON with three escalating attempts:
+
+    1. plain write;
+    2. clear the read-only attribute and retry;
+    3. grant the Users group write ACL on the folder (Windows) and retry.
+    """
+    for attempt in range(3):
         try:
-            import stat as statmod
-            st = os.stat(path)
-            os.chmod(path, st.st_mode | statmod.S_IWRITE)
             with io.open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             return True
-        except Exception:
-            return False
+        except (PermissionError, OSError):
+            if attempt == 0:
+                _clear_readonly(path)
+            elif attempt == 1 and os.name == "nt":
+                _grant_users_write(os.path.dirname(path) or ".")
+            else:
+                return False
+    return False
 
 
 def set_enabled(mod_id, enabled, base=None):
     """Persist the enabled flag in the mod's mod.json. Returns True on success."""
-    base = base or mods_base()
+    base = base or effective_mods_base()
     for info in list_all_mods(base):
         if info["id"] != mod_id:
             continue

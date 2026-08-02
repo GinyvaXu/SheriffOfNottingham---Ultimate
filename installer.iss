@@ -1,8 +1,8 @@
-﻿; Sheriff of Nottingham - Inno Setup installer script (v1.2.2)
+﻿; Sheriff of Nottingham - Inno Setup installer script (v1.2.3)
 ; Compile: "C:\Users\zhenl\InnoSetup6\ISCC.exe" installer.iss
 
 #define MyAppName "Sheriff of Nottingham"
-#define MyAppVersion "1.2.2"
+#define MyAppVersion "1.2.3"
 #define MyAppPublisher "Sheriff Project"
 #define MyAppExeName "SheriffOfNottingham.exe"
 
@@ -36,6 +36,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[Dirs]
+; Let every local user enable/disable mods without admin rights, even when the
+; game is installed under C:\Program Files (ACL protected).
+Name: "{app}\mods"; Permissions: users-modify
+
 [Files]
 Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "mods\*"; DestDir: "{app}\mods"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -51,3 +56,5 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 [UninstallDelete]
 ; Remove the mods folder (including any mods the player added) on uninstall.
 Type: filesandordirs; Name: "{app}\mods"
+; Also clean up the per-user mods fallback folder (%APPDATA%).
+Type: filesandordirs; Name: "{userappdata}\SheriffOfNottingham\mods"

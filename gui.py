@@ -789,11 +789,14 @@ class App:
         self.screen.blit(title, title.get_rect(center=(W // 2, 60)))
         hint = get_font(15).render(self._t("mods_hint"), True, COLOR_DIM)
         self.screen.blit(hint, hint.get_rect(center=(W // 2, 94)))
+        path = mods.effective_mods_base()
+        ptext = get_font(15).render(self._t("mods_path", s=path), True, COLOR_GOLD)
+        self.screen.blit(ptext, (60, 112))
         mlist = self.mod_list
         if not mlist:
             t = get_font(20).render(self._t("mods_none"), True, COLOR_TEXT)
-            self.screen.blit(t, (60, 140))
-        y = 126
+            self.screen.blit(t, (60, 150))
+        y = 136
         for i, m in enumerate(mlist[:7]):
             pygame.draw.rect(self.screen, COLOR_PANEL, (60, y, 1160, 72), border_radius=8)
             state = self._t("mods_on" if m["enabled"] else "mods_off")
@@ -811,10 +814,10 @@ class App:
         if self.mod_errors:
             t = get_font(15).render(self._t("mods_errors", s="; ".join(self.mod_errors)),
                                     True, COLOR_RED)
-            self.screen.blit(t, (60, 636))
+            self.screen.blit(t, (60, 646))
         if self.mods_toast:
             t = get_font(15).render(self.mods_toast, True, COLOR_GREEN)
-            self.screen.blit(t, (60, 664))
+            self.screen.blit(t, (60, 674))
         for b in self.buttons:
             b.draw(self.screen)
 

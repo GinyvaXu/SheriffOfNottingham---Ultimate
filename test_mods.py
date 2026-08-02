@@ -151,8 +151,28 @@ def register(api):
             assert json.load(f)["enabled"] is True
         print("PASS toggle read-only mod.json")
 
+        # ---- regression: per-user fallback base + mod migration ----
+        fb_src = os.path.join(tmp, "fb_src")
+        fb_dst = os.path.join(tmp, "fb_dst")
+        os.makedirs(os.path.join(fb_src, "fb_mod"))
+        os.makedirs(os.path.join(fb_src, "plain_dir"))
+        with open(os.path.join(fb_src, "fb_mod", "mod.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"id": "fb_mod", "enabled": True}, f)
+        with open(os.path.join(fb_src, "plain_dir", "notes.txt"), "w") as f:
+            f.write("x")
+        assert mods._migrate_mods(fb_src, fb_dst), "migration failed"
+        assert os.path.isfile(os.path.join(fb_dst, "fb_mod", "mod.json"))
+        assert not os.path.isdir(os.path.join(fb_dst, "plain_dir")),             "folders without mod.json must not migrate"
+        assert mods._is_writable_dir(fb_dst)
+        assert mods.set_enabled("fb_mod", False, base=fb_dst), "toggle in fallback base failed"
+        with open(os.path.join(fb_dst, "fb_mod", "mod.json"), encoding="utf-8") as f:
+            assert json.load(f)["enabled"] is False
+        print("PASS per-user fallback base + migration")
+
     finally:
         _restore(snap)
+        mods.reset_mods_base_cache()
         if old_env is None:
             os.environ.pop("SHERIFF_MODS_DIR", None)
         else:

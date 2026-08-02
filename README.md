@@ -9,6 +9,7 @@ v1.1.0 adds a **mod system** and an **installable/uninstallable setup package**.
 v1.2.0 adds a **game icon**, decorative in-game graphics, an **in-game mods management screen**, and a bundled **cyberpunk reskin mod**.
 v1.2.1 adds **automatic update checking** (startup check + menu button) and one-click silent reinstall from GitHub releases.
 v1.2.2 fixes **mod enable/disable save failures** (UTF-8 BOM manifests and read-only files) and makes the **update check** resilient (jsDelivr + GitHub API fallback sources, retries, friendly timeout/network messages).
+v1.2.3 fixes **"mod.json not writable" after installing under Program Files**: the installer grants write permission on the mods folder, the game self-repairs folder ACLs (icacls) on demand, and automatically falls back to a per-user mods folder under %APPDATA% (with migration) when the install folder is still not writable. The Mods screen now shows the actual mods folder path.
 
 ## Files
 
@@ -21,7 +22,7 @@ gfx.py       Procedural decorative graphics (badge, coin, card back, icon)
 mods.py      Mod loader (mods/ folder next to the exe, ModAPI for add/patch)
 lang.py      Bilingual strings (zh/en) + card-name rebuild for mods
 main.py      Entry point (--version shows the version dialog)
-version.py   __version__ = "1.2.2"
+version.py   __version__ = "1.2.3"
 installer.iss  Inno Setup script that builds the installer
 test_bot.py  Headless bot automation test (full game + reconnect)
 test_ai_bots.py  Test for in-lobby AI bots (host adds bots, plays a full game)
