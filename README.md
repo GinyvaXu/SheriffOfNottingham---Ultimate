@@ -1,3 +1,5 @@
+**English** | [??](README_zh-CN.md)
+
 # Sheriff of Nottingham - Python Lite Online
 
 A minimal Python implementation of the classic board game **Sheriff of Nottingham**.
