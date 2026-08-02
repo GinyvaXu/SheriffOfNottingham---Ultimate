@@ -19,6 +19,33 @@ import mods
 RESKIN_MODS = ["cyberpunk_mod", "medieval_mod", "starlight_mod",
                "steampunk_mod", "arcane_mod"]
 
+# Characters that appear when UTF-8 text was mis-decoded as GBK and re-saved.
+# Their presence in a zh string means the file was mangled (e.g. "????" ->
+# "???"). The reskin regression test must reject them.
+_MOJIBAKE_CHARS = set(
+    "?????????????????????????????????????????????????????????????????????????????")
+
+
+def _zh_ok(s):
+    """Chinese is intact: has real CJK ideographs, no '?' and no mojibake chars."""
+    if not any(0x4E00 <= ord(c) <= 0x9FFF for c in s):
+        return False
+    if "?" in s:
+        return False
+    return not any(c in _MOJIBAKE_CHARS for c in s)
+
+
+def _assert_zh_clean(mod_py_path, mod_json_path, market_name, market_desc):
+    """Assert a reskin mod ships clean Chinese in both mod.py and mod.json."""
+    with io.open(mod_py_path, encoding="utf-8") as f:
+        py = f.read()
+    assert _zh_ok(py), f"{mod_py_path}: mod.py Chinese missing/mangled"
+    with io.open(mod_json_path, encoding="utf-8") as f:
+        mj = json.load(f)
+    zh = str(mj.get("name_zh", "")) + str(mj.get("description_zh", ""))
+    assert _zh_ok(zh), f"{mod_json_path}: mod.json Chinese missing/mangled"
+    assert _zh_ok(market_name + market_desc), "market zh missing/mangled"
+
 
 def _snapshot():
     return {
@@ -66,6 +93,12 @@ def main():
             loaded, errors = mods.load_mods()
             assert len(loaded) == 1, (folder, [m["id"] for m in loaded])
             assert not errors, errors
+            # the shipped mod.py must keep intact Chinese (no '?' / mojibake)
+            with io.open(os.path.join("mods", folder, "mod.py"), encoding="utf-8") as f:
+                modpy_src = f.read()
+            assert _zh_ok(modpy_src), (folder, "mod.py Chinese mangled")
+            zh_apple = game.TYPE_ZH["APPLE"]
+            assert _zh_ok(zh_apple), (folder, zh_apple)
             en, zh = game.TYPE_EN["APPLE"], game.TYPE_ZH["APPLE"]
             assert en != "Apple" and zh != "\u82f9\u679c", (folder, en, zh)
             assert "Apple" in lang.RENAME_MAP and "Silk" in lang.RENAME_MAP
@@ -85,6 +118,13 @@ def main():
         # ---- mod market: local file:// install + status ----
         market_base = os.path.join(tmp, "market_mods")
         os.makedirs(market_base)
+        # the market manifest shipped in the repo must have clean Chinese
+        with io.open("mods_market.json", encoding="utf-8") as f:
+            market_manifest = json.load(f)
+        for mm in market_manifest["mods"]:
+            assert _zh_ok(mm["name"]["zh"] + mm["description"]["zh"]), (
+                mm["id"], "mods_market.json zh mangled")
+
         for key, folder in [("cyberpunk", "cyberpunk_mod"),
                             ("medieval", "medieval_mod")]:
             info = {"id": key, "folder": folder, "version": "9.9.9",

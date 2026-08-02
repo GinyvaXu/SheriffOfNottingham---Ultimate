@@ -27,23 +27,24 @@ _NAMES_EN = {
 }
 
 _NAMES_ZH = {
-    'APPLE': '????',
-    'BLACK_MARKET': '?????',
-    'BREAD': '????',
-    'CHEESE': '?????',
-    'CHICKEN': '????',
-    'COFFEE': '?????',
-    'CROSSBOW': '??',
-    'ROYAL_BLUE_CHEESE': '????',
-    'ROYAL_CHICKEN': '????',
-    'ROYAL_COARSE_BREAD': '????',
-    'ROYAL_GOLD_APPLE': '????',
-    'ROYAL_GOUDA_CHEESE': '????',
-    'ROYAL_GREEN_APPLE': '????',
-    'ROYAL_RYE_BREAD': '????',
-    'SILK': '??????',
-    'WINE': '?????',
+    'APPLE': '果园苹果',
+    'BLACK_MARKET': '走私者巢穴',
+    'BREAD': '燕麦面包',
+    'CHEESE': '修道院奶酪',
+    'CHICKEN': '肥育阉鸡',
+    'COFFEE': '阿拉伯咖啡',
+    'CROSSBOW': '战弩',
+    'ROYAL_BLUE_CHEESE': '贵族蓝纹',
+    'ROYAL_CHICKEN': '王室烤禽',
+    'ROYAL_COARSE_BREAD': '农夫粗粮',
+    'ROYAL_GOLD_APPLE': '金纹章果',
+    'ROYAL_GOUDA_CHEESE': '院长奶酪',
+    'ROYAL_GREEN_APPLE': '绿纹章果',
+    'ROYAL_RYE_BREAD': '修士黑麦',
+    'SILK': '弗兰德丝绸',
+    'WINE': '修士蜜酒',
 }
+
 _COLORS = {
     'APPLE': (150, 210, 90),
     'BLACK_MARKET': (60, 60, 60),
@@ -70,11 +71,12 @@ _PHASES_EN = {
     'MARKET': 'Market Day',
 }
 _PHASES_ZH = {
-    'DECLARE': '??',
-    'INSPECT': '??',
-    'LOAD': '??',
-    'MARKET': '???',
+    'DECLARE': '申报',
+    'INSPECT': '搜查',
+    'LOAD': '装货',
+    'MARKET': '赶集日',
 }
+
 _UI_EN = {
     'head': 'Phase: {phase}   Round {r}/{t}   Sheriff: {name}',
     'sheriff_tag': '[Sheriff] ',
@@ -82,11 +84,13 @@ _UI_EN = {
     'title': 'Sheriff of Medieval Nottingham',
 }
 _UI_ZH = {
-    'head': '???{phase}   ? {r}/{t} ??   ???{name}',
-    'sheriff_tag': '????',
-    'subtitle': '????? | ???? + ????????',
-    'title': '????????',
+    'head': '阶段：{phase}   第 {r}/{t} 回合   郡长：{name}',
+    'sheriff_tag': '【郡长】',
+    'subtitle': '中世纪皮肤 | 房主开房 + 自行端口映射联机',
+    'title': '中世纪诺丁汉警长',
 }
+
+
 def register(api):
     for key in _NAMES_EN:
         api.rename(key, _NAMES_EN[key], _NAMES_ZH[key])

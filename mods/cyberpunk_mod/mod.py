@@ -27,23 +27,24 @@ _NAMES_EN = {
 }
 
 _NAMES_ZH = {
-    'APPLE': '????',
-    'BLACK_MARKET': '??',
-    'BREAD': '????',
-    'CHEESE': '????',
-    'CHICKEN': '????',
-    'COFFEE': '?????',
-    'CROSSBOW': '???',
-    'ROYAL_BLUE_CHEESE': '????',
-    'ROYAL_CHICKEN': '????',
-    'ROYAL_COARSE_BREAD': '????',
-    'ROYAL_GOLD_APPLE': '???',
-    'ROYAL_GOUDA_CHEESE': '????',
-    'ROYAL_GREEN_APPLE': '??',
-    'ROYAL_RYE_BREAD': '????',
-    'SILK': '????',
-    'WINE': '??',
+    'APPLE': '合成果',
+    'BLACK_MARKET': '暗网',
+    'BREAD': '营养面包',
+    'CHEESE': '纳米乳品',
+    'CHICKEN': '培养蛋白',
+    'COFFEE': '神经兴奋剂',
+    'CROSSBOW': '磁轨枪',
+    'ROYAL_BLUE_CHEESE': '赛博蓝乳',
+    'ROYAL_CHICKEN': '生化烤肉',
+    'ROYAL_COARSE_BREAD': '数据面包',
+    'ROYAL_GOLD_APPLE': '镀金果',
+    'ROYAL_GOUDA_CHEESE': '量子乳品',
+    'ROYAL_GREEN_APPLE': '铬果',
+    'ROYAL_RYE_BREAD': '电路黑麦',
+    'SILK': '记忆丝绸',
+    'WINE': '夜酿',
 }
+
 _COLORS = {
     'APPLE': (110, 235, 130),
     'BLACK_MARKET': (0, 255, 220),
@@ -70,11 +71,12 @@ _PHASES_EN = {
     'MARKET': 'Neon Market',
 }
 _PHASES_ZH = {
-    'DECLARE': '??',
-    'INSPECT': '??',
-    'LOAD': '??',
-    'MARKET': '????',
+    'DECLARE': '广播',
+    'INSPECT': '扫描',
+    'LOAD': '上传',
+    'MARKET': '霓虹市场',
 }
+
 _UI_EN = {
     'head': 'Phase: {phase}   Round {r}/{t}   NetBoss: {name}',
     'sheriff_tag': '[NetBoss] ',
@@ -82,11 +84,13 @@ _UI_EN = {
     'title': 'Sheriff of Neo-Nottingham',
 }
 _UI_ZH = {
-    'head': '???{phase}   ? {r}/{t} ??   ???{name}',
-    'sheriff_tag': '????',
-    'subtitle': '?????? | ???? + ????????',
-    'title': '???????',
+    'head': '阶段：{phase}   第 {r}/{t} 回合   网警：{name}',
+    'sheriff_tag': '【网警】',
+    'subtitle': '赛博朋克皮肤 | 房主开房 + 自行端口映射联机',
+    'title': '霓虹诺丁汉警长',
 }
+
+
 def register(api):
     for key in _NAMES_EN:
         api.rename(key, _NAMES_EN[key], _NAMES_ZH[key])
