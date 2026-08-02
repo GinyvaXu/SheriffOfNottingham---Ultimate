@@ -11,6 +11,7 @@ v1.2.1 adds **automatic update checking** (startup check + menu button) and one-
 v1.2.2 fixes **mod enable/disable save failures** (UTF-8 BOM manifests and read-only files) and makes the **update check** resilient (jsDelivr + GitHub API fallback sources, retries, friendly timeout/network messages).
 v1.2.3 fixes **"mod.json not writable" after installing under Program Files**: the installer grants write permission on the mods folder, the game self-repairs folder ACLs (icacls) on demand, and automatically falls back to a per-user mods folder under %APPDATA% (with migration) when the install folder is still not writable. The Mods screen now shows the actual mods folder path.
 v1.3.0 adds an in-game **Mods Market** (browse the GitHub-hosted catalog, one-click download & install), ships **5 text-only reskin mods** (cyberpunk / medieval / starlight / steampunk / arcane), and makes server **chat messages follow the local reskin** ? reskins are client-side only, so each player online sees their own version.
+v1.4.0 adds **rule mods** (gameplay-changing mods) with a **server-side room check**: everyone in a room must have the same rule mods installed (id + version), the lobby shows each player's mod status and offers **one-click download & install** of missing rule mods. Ships two example rule mods (**Marathon Market**, **Spice Road**).
 
 ## Files
 
@@ -124,7 +125,47 @@ def register(api):
 - All players in a room should install the same content mods: the server drives
   the rules, clients only need the names/colors to render cards.
 
+
+## Rule Mods (v1.4.0)
+
+A rule mod is a mod whose `mod.json` has `"category": "rules"`. Rule mods change
+the actual rules of the game and come with a **server-side room check**:
+
+- Rule mods run on the **host server** (the host process loads the mod and the
+  server drives the changed rules).
+- Every human player in the room must install the **exact same rule mods
+  (id + version)** before the game can start.
+- The lobby shows the room's required rule mods and each player's status
+  (OK / missing). Players who are missing mods can click **"Install missing
+  rule mods"** to download them from the in-game market with one click, then
+  restart the game and rejoin.
+- Bots always match the host (they run inside the server).
+- Content added by a rule mod (e.g. new card types) is driven by the server;
+  clients render the same cards because they have the same mod installed.
+
+### Bundled example rule mods (disabled by default)
+
+| Mod | What it changes |
+| --- | --- |
+| Marathon Market | Lengthens the match: 3 rounds per player (4 for 3-player games). |
+| Spice Road | Adds a legal goods (Pepper) and a contraband (Tea). |
+
+### Recommended rule-mod ideas
+
+| Idea | Gameplay change |
+| --- | --- |
+| Double Fines | All inspection fines & compensation double - high risk, high reward. |
+| Market Volatility | Goods values change randomly each round. |
+| Black Market Baron | Bigger black-market rewards, different submit counts. |
+| Strict Sheriff | The sheriff inspects one extra merchant per round; fines double. |
+| Royal Feast | More royal cards, higher royal values. |
+| Embargo | One random goods type is banned for the whole match. |
+| Fast Trade | Hand size 5, bags of 1-4 cards. |
+| Generous King | Higher 1st/2nd place end bonuses. |
+| No Bribes | Bribe phase removed - pure nerve. |
+
 ## Installer (v1.2.0)
+
 
 `installer\SheriffOfNottingham-Setup-1.2.0.exe` is a normal Windows setup built
 with Inno Setup:

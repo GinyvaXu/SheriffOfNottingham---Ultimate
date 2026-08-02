@@ -80,6 +80,38 @@
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/arcane_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/arcane_mod.zip"
+    },
+    {
+      "id": "marathon_market",
+      "folder": "rules_marathon_market",
+      "version": "1.4.0",
+      "category": "rules",
+      "name": {
+        "en": "Marathon Market",
+        "zh": "马拉松集市"
+      },
+      "description": {
+        "en": "Rule mod: lengthens the match to 3 rounds per player (4 for 3-player games). All players in a room need this mod installed.",
+        "zh": "规则模组：延长对局，每名玩家默认两回合改为三回合（3人局为4回合）。房间内所有玩家都需安装此模组。"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_marathon_market.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_marathon_market.zip"
+    },
+    {
+      "id": "spice_road",
+      "folder": "rules_spice_road",
+      "version": "1.4.0",
+      "category": "rules",
+      "name": {
+        "en": "Spice Road",
+        "zh": "香料之路"
+      },
+      "description": {
+        "en": "Rule mod: adds a new legal goods (Pepper) and a new contraband (Tea). All players in a room need this mod installed.",
+        "zh": "规则模组：新增合法货物胡椒与违禁品茶叶。房间内所有玩家都需安装此模组。"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_spice_road.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_spice_road.zip"
     }
   ]
 }

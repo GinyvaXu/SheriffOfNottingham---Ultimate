@@ -431,3 +431,27 @@ def load_mods(base=None):
             errors.append(f"{mid}: {e!r}")
     lang.rebuild_names()
     return loaded, errors
+
+
+def rules_mods(base=None):
+    """Return the enabled rule mods (category == "rules") as a stable list.
+
+    Used for the server-side room check: every player in a room must have the
+    exact same rule mods (id + version) installed so the rules stay in sync
+    with the host's server. Text-only reskin mods are NOT included.
+    """
+    out = []
+    for info in discover_mods(base):
+        if str(info.get("category", "other")) != "rules":
+            continue
+        out.append({"id": str(info["id"]),
+                    "version": str(info["version"]),
+                    "name": str(info["name"]),
+                    "name_zh": str(info.get("name_zh", ""))})
+    out.sort(key=lambda m: m["id"])
+    return out
+
+
+def is_rules_mod(info):
+    """True when a mod info dict is a rule mod (category == "rules")."""
+    return str((info or {}).get("category", "other")) == "rules"

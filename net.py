@@ -130,6 +130,7 @@ class GameServer:
         if not ok or not msg or msg.get("t") != "hello":
             conn.close()
             return
+        rules = self._norm_mods(msg.get("mods"))
         name = str(msg.get("name", "")).strip()
         if not name:
             _send(conn, {"t": "error", "msg": "Name cannot be empty"})
@@ -147,7 +148,8 @@ class GameServer:
                     conn.close()
                     return
                 self.seats[seat] = {"name": name, "conn": conn, "reader": reader,
-                                    "seat": seat, "game_seat": None}
+                                    "seat": seat, "game_seat": None,
+                                    "rules_mods": rules}
                 _send(conn, {"t": "welcome", "seat": seat, "name": name, "host": seat == 0})
                 self._broadcast_lobby()
             else:
@@ -163,6 +165,7 @@ class GameServer:
                 s = self.seats[seat]
                 s["conn"] = conn
                 s["reader"] = reader
+                s["rules_mods"] = rules
                 self.game.players[s["game_seat"]].connected = True
                 _send(conn, {"t": "welcome", "seat": seat, "name": name, "host": seat == 0,
                              "reconnected": True})
@@ -202,14 +205,60 @@ class GameServer:
 
     # ---------- Lobby / game dispatch ----------
 
+    @staticmethod
+    def _norm_mods(raw):
+        """Normalize a client-reported rule-mod list to [{"id","version"}] sorted."""
+        out = []
+        for m in raw or []:
+            if not isinstance(m, dict):
+                continue
+            mid = str(m.get("id", "")).strip()
+            if not mid:
+                continue
+            out.append({"id": mid.lower(), "version": str(m.get("version", "")).strip()})
+        out.sort(key=lambda x: x["id"])
+        return out
+
+    def _seat_mods_ok(self, s):
+        """True when a seat's rule mods match the host's (bots always match)."""
+        if s is None:
+            return True
+        if s.get("bot"):
+            return True  # bots run inside the host process -> always in sync
+        host_mods = self.seats[0]["rules_mods"] if self.seats[0] else []
+        return self._norm_mods(s.get("rules_mods")) == host_mods
+
+    def _mods_check(self):
+        """List of seats whose rule mods differ from the host's (humans only)."""
+        host_mods = self.seats[0]["rules_mods"] if self.seats[0] else []
+        missing = []
+        for i, s in enumerate(self.seats):
+            if s is None or s.get("bot") or s["conn"] is None:
+                continue
+            have = self._norm_mods(s.get("rules_mods"))
+            if have != host_mods:
+                missing.append({"seat": i, "name": s["name"],
+                                "have": have, "need": host_mods})
+        return missing
+
     def _broadcast_lobby(self):
         joined = [{"seat": i, "name": s["name"], "host": i == 0,
                    "bot": s.get("bot")}
                   for i, s in enumerate(self.seats) if s is not None]
+        host_mods = self.seats[0]["rules_mods"] if self.seats[0] else []
+        players_mods = []
+        for i, s in enumerate(self.seats):
+            if s is None:
+                continue
+            players_mods.append({"seat": i, "name": s["name"],
+                                 "mods": host_mods if s.get("bot") else s.get("rules_mods", [])})
+        mods_ok = all(self._seat_mods_ok(s) for s in self.seats if s is not None)
         for i, s in enumerate(self.seats):
             if s and s["conn"] is not None:
                 _send(s["conn"], {"t": "lobby", "max_players": self.max_players,
-                                  "joined": joined, "can_start": len(joined) >= 2 and i == 0})
+                                  "joined": joined, "can_start": len(joined) >= 2 and i == 0,
+                                  "rules_mods": host_mods, "players_mods": players_mods,
+                                  "mods_ok": mods_ok})
 
     def _dispatch(self, seat, msg):
         t = msg.get("t")
@@ -234,6 +283,12 @@ class GameServer:
                     joined = [i for i, x in enumerate(self.seats) if x is not None]
                     if len(joined) < 2:
                         _send(s["conn"], {"t": "error", "msg": "Need at least 2 players to start"})
+                        return
+                    bad = self._mods_check()
+                    if bad:
+                        names = ", ".join(x["name"] for x in bad)
+                        _send(s["conn"], {"t": "error", "msg": "Rule mods mismatch - " + names})
+                        self._broadcast({"t": "mods_mismatch", "missing": bad})
                         return
                     self._start_game(joined, msg.get("rounds"))
                 elif t == "add_bot" and seat == 0:
@@ -638,14 +693,17 @@ class GameServer:
 class GameClient:
     """Client: background reader thread + message queue; emits a disconnected event on drop."""
 
-    def __init__(self, host, port, name):
+    def __init__(self, host, port, name, rules=None):
         self.name = name
         self.sock = socket.create_connection((host, port), timeout=10)
         self.sock.settimeout(None)
         self.q = queue.Queue()
         self.send_lock = threading.Lock()
         self.alive = True
-        self.send({"t": "hello", "name": name})
+        if rules is None:
+            import mods  # local import avoids a net->mods->gui->net cycle
+            rules = mods.rules_mods()
+        self.send({"t": "hello", "name": name, "mods": rules})
         self.thread = threading.Thread(target=self._read_loop, daemon=True)
         self.thread.start()
 

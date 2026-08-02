@@ -238,6 +238,10 @@ class App:
         self.screen_name = "menu"
         self.view = None
         self.lobby = None
+        self.lobby_rules_mods = []
+        self.lobby_mods_ok = True
+        self.lobby_players_mods = []
+        self.lobby_mods_toast = ""
         self.chat_log = []
         self.banners = []
         self.selected = set()
@@ -465,8 +469,16 @@ class App:
                 self.is_host = bool(m.get("host"))
             elif t == "lobby":
                 self.lobby = m
+                self.lobby_rules_mods = list(m.get("rules_mods") or [])
+                self.lobby_mods_ok = bool(m.get("mods_ok", True))
+                self.lobby_players_mods = list(m.get("players_mods") or [])
                 self.screen_name = "lobby"
                 self._rebuild_lobby_ui()
+            elif t == "mods_mismatch":
+                missing = m.get("missing") or []
+                names = ", ".join(str(x.get("name", "?")) for x in missing)
+                self._append_chat(self._t("mods_mismatch_chat", names=names), COLOR_RED)
+                self._append_chat(self._t("rmods_start_block"), COLOR_RED)
             elif t == "game_start":
                 self._append_chat(self._msg(m.get("msg", "Game started!")), COLOR_ACCENT)
             elif t == "view":
@@ -587,8 +599,66 @@ class App:
                                        self._remove_bot_click, enabled=bool(bots)))
         self.buttons.append(Button((W // 2 - 130, 610 if not self.is_host else 720, 260, 44),
                                    self._t("btn_leave"), lambda: setattr(self, "done", True)))
+        if not self.is_host and not self.lobby_mods_ok and self.lobby_rules_mods:
+            installing = self.market_state in ("loading", "installing")
+            self.buttons.append(Button((W // 2 + 120, 560, 220, 40),
+                                       self._t("btn_install_rule_mods"),
+                                       self._install_missing_rule_mods,
+                                       enabled=not installing))
         self.buttons.append(Button((W // 2 - 50, 480, 120, 40), self._t("btn_rename"), self._rename_click))
         self.buttons.append(Button((W - 170, 20, 140, 40), self._t("btn_lang"), self._toggle_lang))
+
+    def _pm_mods_ok(self, pm):
+        """Compare a player's reported rule mods against the room's list."""
+        def norm(items):
+            return sorted(
+                ({"id": str(x.get("id", "")).lower(), "version": str(x.get("version", ""))}
+                 for x in items or []),
+                key=lambda x: x["id"])
+        return norm(pm.get("mods")) == norm(self.lobby_rules_mods)
+
+    def _missing_rule_mod_ids(self):
+        """Rule mods the room requires but this client does not have (id+version)."""
+        mine = mods.rules_mods()
+        have = {(m.get("id", ""), m.get("version", "")) for m in mine}
+        return [m.get("id", "") for m in (self.lobby_rules_mods or [])
+                if (m.get("id", ""), m.get("version", "")) not in have]
+
+    def _install_missing_rule_mods(self):
+        if self.market_state in ("loading", "installing"):
+            return
+        need = self._missing_rule_mod_ids()
+        if not need:
+            return
+        self.market_state = "loading"
+        self.lobby_mods_toast = self._t("market_installing")
+        threading.Thread(target=self._thread_install_rule_mods, args=(need,),
+                         daemon=True).start()
+
+    def _thread_install_rule_mods(self, need_ids):
+        mods_list, err = market.fetch_market()
+        by_id = {str(m.get("id", "")).lower(): m for m in (mods_list or [])}
+        to_install = [by_id[i] for i in need_ids if i in by_id]
+        self.market_state = "ready"
+        if not to_install:
+            if err:
+                self.lobby_mods_toast = self._t("market_load_failed", e=err)
+            else:
+                self.lobby_mods_toast = self._t("mods_not_on_market")
+            self._rebuild_lobby_ui()
+            return
+        ok_all = True
+        msgs = []
+        for info in to_install:
+            ok, msg = market.install_mod(info)
+            if not ok:
+                ok_all = False
+                msgs.append(msg)
+        if ok_all:
+            self.lobby_mods_toast = self._t("mods_installed_restart")
+        else:
+            self.lobby_mods_toast = self._t("market_failed", e="; ".join(msgs))
+        self._rebuild_lobby_ui()
 
     def _start_game_click(self):
         r = self._parse_int(self.rounds_input.text, 0)
@@ -1211,6 +1281,30 @@ class App:
             self.screen.blit(t, (W // 2 - 200, y + idx * 24))
         hint = get_font(15).render(self._t("rule_hint"), True, COLOR_GOLD)
         self.screen.blit(hint, (W // 2 - 200, y + len(self.server_info) * 24 + 6))
+        ry = y + len(self.server_info) * 24 + 30
+        t = get_font(16).render(self._t("rmods_title"), True, COLOR_ACCENT)
+        self.screen.blit(t, (W // 2 - 200, ry)); ry += 24
+        rmods = self.lobby_rules_mods or []
+        if not rmods:
+            t = get_font(15).render(self._t("rmods_none"), True, COLOR_DIM)
+            self.screen.blit(t, (W // 2 - 200, ry)); ry += 22
+        else:
+            for m in rmods:
+                nm = (m.get("name_zh") or m.get("name") or m.get("id"))
+                if self.lang != "zh":
+                    nm = m.get("name") or m.get("id")
+                t = get_font(15).render("- {0}  v{1}".format(nm, m.get("version", "?")), True, COLOR_TEXT)
+                self.screen.blit(t, (W // 2 - 200, ry)); ry += 20
+        for pm in self.lobby_players_mods:
+            ok = self._pm_mods_ok(pm)
+            col = COLOR_GREEN if ok else COLOR_RED
+            txt = "{0}  {1}".format(pm.get("name", "?"),
+                                    self._t("rmods_ok") if ok else self._t("rmods_missing"))
+            t = get_font(14).render(txt, True, col)
+            self.screen.blit(t, (W // 2 - 200, ry)); ry += 18
+        if self.lobby_mods_toast:
+            t = get_font(14).render(self.lobby_mods_toast, True, COLOR_GOLD)
+            self.screen.blit(t, (W // 2 - 200, ry))
         # rename
         t = get_font(18).render(self._t("lbl_name"), True, COLOR_TEXT)
         self.screen.blit(t, (W // 2 - 260, 446))

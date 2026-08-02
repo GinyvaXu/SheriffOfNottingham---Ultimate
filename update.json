@@ -1,5 +1,5 @@
 {
-  "version": "1.3.2",
-  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.3.2/SheriffOfNottingham-Setup-1.3.2.exe",
-  "notes": "v1.3.2: Fix reskin mods showing \"?\" characters in-game (mod.py Chinese text was corrupted in the v1.3.1 rebuild); repaired all 5 reskin mods (cyberpunk/medieval/starlight/steampunk/arcane), market manifest and mod packs rebuilt with intact Chinese, mod versions bumped to 1.3.2 so installed clients see an update."
+  "version": "1.4.0",
+  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.4.0/SheriffOfNottingham-Setup-1.4.0.exe",
+  "notes": "v1.4.0: Rule mods (gameplay-changing mods, category=rules) with server-side room check: every player in a room must install the same rule mods (id+version); the lobby shows each player mod status and offers one-click download & install of missing rule mods from the in-game market. Ships 2 example rule mods (Marathon Market, Spice Road) and a recommended rule-mod ideas list in the README."
 }

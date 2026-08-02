@@ -63,6 +63,13 @@ HAND_SIZE = 6
 BAG_MIN, BAG_MAX = 1, 5
 DISCARD_MAX = 5
 
+# Default match length: n * ROUNDS_PER_PLAYER rounds (3-player games use the
+# dedicated 3p multiplier). Rule mods may patch these to lengthen/shorten a
+# match; the host server drives the rules so every player must install the
+# same rule mods.
+ROUNDS_PER_PLAYER = 2
+ROUNDS_PER_PLAYER_3P = 3
+
 # Black Market quests: 3 random contraband types, 2 reward slots each. A slot is
 # claimed via the Submit button once a player has BLACK_MARKET_NEED cards of the
 # type in their stall; the 3 cards are discarded and the player gets the slot's
@@ -184,7 +191,7 @@ class Game:
         self.first_sheriff = self.rng.randrange(self.n)
         self.sheriff = self.first_sheriff
         self.round_no = 0
-        self.rounds_total = rounds_total or self.n * (3 if self.n == 3 else 2)
+        self.rounds_total = rounds_total or self.n * (ROUNDS_PER_PLAYER_3P if self.n == 3 else ROUNDS_PER_PLAYER)
         self.order = []       # merchant order this round (left of sheriff first)
         self.market_idx = 0
         self.decl_idx = 0

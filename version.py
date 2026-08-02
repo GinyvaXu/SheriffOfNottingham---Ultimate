@@ -1,3 +1,3 @@
 # -*- coding: utf-8 -*-
 """Project version. Bump this and tag vX.Y.Z when archiving a release."""
-__version__ = "1.3.2"
+__version__ = "1.4.0"
