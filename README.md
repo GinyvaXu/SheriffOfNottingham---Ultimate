@@ -6,6 +6,7 @@ A minimal Python implementation of the classic board game **Sheriff of Nottingha
 Feature-complete, simple code, modular design. Classic rules plus two optional
 house modules (Royal Goods cards and Black Market quests), both toggleable.
 v1.1.0 adds a **mod system** and an **installable/uninstallable setup package**.
+v1.2.0 adds a **game icon**, decorative in-game graphics, an **in-game mods management screen**, and a bundled **cyberpunk reskin mod**.
 
 ## Files
 
@@ -14,6 +15,7 @@ game.py      Rules & state machine (pure logic, no UI/network)
 bot.py       Bot AI module (easy / normal / hard, runs on the host server)
 net.py       TCP server + JSON protocol + disconnect/reconnect + bot driver
 gui.py       pygame button-only UI
+gfx.py       Procedural decorative graphics (badge, coin, card back, icon)
 mods.py      Mod loader (mods/ folder next to the exe, ModAPI for add/patch)
 lang.py      Bilingual strings (zh/en) + card-name rebuild for mods
 main.py      Entry point (--version shows the version dialog)
@@ -23,7 +25,7 @@ test_bot.py  Headless bot automation test (full game + reconnect)
 test_ai_bots.py  Test for in-lobby AI bots (host adds bots, plays a full game)
 test_new_rules.py  Unit tests for royal goods & black market modules
 test_mods.py Mod loader unit tests (register/patch/enable/disable/errors)
-mods/        Built-in mod folder (README.md + example_mod, disabled by default)
+mods/        Built-in mod folder (README.md + example_mod + cyberpunk_mod, disabled by default)
 ```
 
 ## Dependencies & install
@@ -71,7 +73,13 @@ menu has a "Paste" button to drop a received `IP:port` straight into the join bo
   not need a network connection. Their decisions only use public information.
 - A game can be played solo: 1 human + 1-4 bots.
 
-## Mod system (v1.1.0)
+## Mod system (v1.2.0)
+
+- The main menu has a **Mods** screen: view every installed mod (name, version,
+  description), enable/disable it (written back to its `mod.json`), refresh the
+  list and see load errors. Changes apply after the game restarts.
+- A bundled `cyberpunk_mod/` renames all goods, phases and key UI terms to a
+  neon cyberpunk theme with matching colors (disabled by default).
 
 Any folder under `mods/` (next to the exe, or the project root when running from
 source) with a `mod.json` is a mod:
@@ -108,9 +116,9 @@ def register(api):
 - All players in a room should install the same content mods: the server drives
   the rules, clients only need the names/colors to render cards.
 
-## Installer (v1.1.0)
+## Installer (v1.2.0)
 
-`installer\SheriffOfNottingham-Setup-1.1.0.exe` is a normal Windows setup built
+`installer\SheriffOfNottingham-Setup-1.2.0.exe` is a normal Windows setup built
 with Inno Setup:
 
 - Installs the game + `mods\` folder + a desktop/start-menu shortcut.
@@ -118,6 +126,13 @@ with Inno Setup:
   whole app folder including any mods you added.
 - Supports English and Chinese installer languages (chosen at install time).
 - Rebuild it with: `ISCC.exe installer.iss` after running `??.bat`.
+
+## Graphics & icon (v1.2.0)
+
+- A sheriff-badge app icon is drawn procedurally and used for the window, the
+  exe and the installer.
+- In-game decorations: menu logo, gold coin next to gold displays, sheriff
+  badge on the sheriff's nameplate, and a card-back for the deck.
 
 ## Rules notes
 

@@ -46,7 +46,8 @@ def main():
         join=args.join, lang_name=args.lang,
         royal=not args.no_royal, black_market=not args.no_blackmarket,
         mod_names=[m["name"] for m in loaded_mods],
-        mod_errors=mod_errors).run()
+        mod_errors=mod_errors,
+        mod_list=mods.list_all_mods()).run()
 
 
 if __name__ == "__main__":

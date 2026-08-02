@@ -176,6 +176,63 @@ def discover_mods(base=None):
     return out
 
 
+def list_all_mods(base=None):
+    """Return ALL mod folders (enabled and disabled) with manifest info.
+
+    Used by the in-game mods management screen.
+    """
+    base = base or mods_base()
+    out = []
+    if not os.path.isdir(base):
+        return out
+    for name in sorted(os.listdir(base)):
+        if name.startswith((".", "_")):
+            continue
+        folder = os.path.join(base, name)
+        if not os.path.isdir(folder):
+            continue
+        mpath = os.path.join(folder, "mod.json")
+        if not os.path.isfile(mpath):
+            continue
+        try:
+            with io.open(mpath, encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception:
+            manifest = {}
+        if not isinstance(manifest, dict):
+            manifest = {}
+        out.append({
+            "id": str(manifest.get("id", name)),
+            "name": str(manifest.get("name", name)),
+            "version": str(manifest.get("version", "0.0.0")),
+            "description": str(manifest.get("description", "")),
+            "enabled": bool(manifest.get("enabled", True)),
+            "folder": folder,
+        })
+    return out
+
+
+def set_enabled(mod_id, enabled, base=None):
+    """Persist the enabled flag in the mod's mod.json. Returns True on success."""
+    base = base or mods_base()
+    for info in list_all_mods(base):
+        if info["id"] != mod_id:
+            continue
+        mpath = os.path.join(info["folder"], "mod.json")
+        try:
+            with io.open(mpath, encoding="utf-8") as f:
+                manifest = json.load(f)
+            if not isinstance(manifest, dict):
+                manifest = {}
+            manifest["enabled"] = bool(enabled)
+            with io.open(mpath, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception:
+            return False
+    return False
+
+
 def load_mods(base=None):
     """Load all enabled mods. Returns (loaded, errors).
 

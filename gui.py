@@ -8,7 +8,9 @@ import time
 import pygame
 
 import game
+import gfx
 import lang
+import mods
 import net
 
 W, H = 1280, 800
@@ -202,10 +204,16 @@ class TextInput:
 class App:
     def __init__(self, host=False, players=4, port=net.DEFAULT_PORT, name="", join="",
                  lang_name="zh", royal=True, black_market=True,
-                 mod_names=None, mod_errors=None):
+                 mod_names=None, mod_errors=None, mod_list=None):
         pygame.init()
         pygame.display.set_caption(lang.UI.get(lang_name, lang.UI["zh"])["title"])
         self.screen = pygame.display.set_mode((W, H))
+        try:
+            icon_path = gfx.asset_path("icon.png")
+            if icon_path:
+                pygame.display.set_icon(pygame.image.load(icon_path))
+        except Exception:
+            pass
         self.clock = pygame.time.Clock()
         try:
             pygame.scrap.init()  # clipboard support
@@ -239,6 +247,8 @@ class App:
         self.menu_note = ""
         self.mod_names = list(mod_names or [])
         self.mod_errors = list(mod_errors or [])
+        self.mod_list = list(mod_list or [])
+        self.mods_toast = ""
         for err in self.mod_errors:
             self._append_chat(self._t("mods_error", s=err), COLOR_RED)
         if self.mod_names:
@@ -319,6 +329,8 @@ class App:
         pygame.display.set_caption(self._t("title"))
         if self.screen_name == "menu":
             self._rebuild_menu_ui()
+        elif self.screen_name == "mods":
+            self._rebuild_mods_ui()
         elif self.screen_name == "lobby":
             self._rebuild_lobby_ui()
         elif self.screen_name == "game":
@@ -379,6 +391,9 @@ class App:
         elif self.screen_name == "lobby":
             self.lobby_rename_input.handle(ev)
             self.rounds_input.handle(ev)
+            for b in self.buttons:
+                b.handle(ev)
+        elif self.screen_name == "mods":
             for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "game":
@@ -477,6 +492,7 @@ class App:
             Button((300, 380, 150, 44), self._t("btn_create"), self._create_room_click),
             Button((470, 380, 150, 44), self._t("btn_join"), self._join_room),
             Button((640, 380, 100, 44), self._t("btn_quit"), lambda: setattr(self, "done", True)),
+            Button((300, 440, 150, 44), self._t("btn_mods"), self._open_mods),
             Button((610, 300, 90, 36), self._t("btn_paste"), self._paste_join),
             Button((W - 170, 20, 140, 40), self._t("btn_lang"), self._toggle_lang),
         ]
@@ -715,12 +731,83 @@ class App:
                        lambda: setattr(self, "done", True)),
             ]
 
+    # ---------- Mods management ----------
+
+    def _open_mods(self):
+        self.screen_name = "mods"
+        self._refresh_mods()
+
+    def _refresh_mods(self):
+        self.mod_list = mods.list_all_mods()
+        self.mods_toast = ""
+        self._rebuild_mods_ui()
+
+    def _toggle_mod(self, mod_id):
+        info = next((m for m in self.mod_list if m["id"] == mod_id), None)
+        if info is None:
+            return
+        ok = mods.set_enabled(mod_id, not info["enabled"])
+        self.mods_toast = self._t("mods_saved" if ok else "mods_save_failed")
+        self.mod_list = mods.list_all_mods()
+        self._rebuild_mods_ui()
+
+    def _back_to_menu(self):
+        self.screen_name = "menu"
+        self._rebuild_menu_ui()
+
+    def _rebuild_mods_ui(self):
+        self.buttons = []
+        for i, m in enumerate(self.mod_list[:7]):
+            label = self._t("mods_disable" if m["enabled"] else "mods_enable")
+            self.buttons.append(Button((1040, 138 + i * 80, 150, 36), label,
+                                       lambda mid=m["id"]: self._toggle_mod(mid)))
+        self.buttons.append(Button((60, 700, 150, 44), self._t("btn_back"),
+                                   self._back_to_menu))
+        self.buttons.append(Button((230, 700, 150, 44), self._t("mods_refresh"),
+                                   self._refresh_mods))
+
+    def _draw_mods(self):
+        title = get_font(36).render(self._t("mods_title"), True, COLOR_ACCENT)
+        self.screen.blit(title, title.get_rect(center=(W // 2, 60)))
+        hint = get_font(15).render(self._t("mods_hint"), True, COLOR_DIM)
+        self.screen.blit(hint, hint.get_rect(center=(W // 2, 94)))
+        mlist = self.mod_list
+        if not mlist:
+            t = get_font(20).render(self._t("mods_none"), True, COLOR_TEXT)
+            self.screen.blit(t, (60, 140))
+        y = 126
+        for i, m in enumerate(mlist[:7]):
+            pygame.draw.rect(self.screen, COLOR_PANEL, (60, y, 1160, 72), border_radius=8)
+            state = self._t("mods_on" if m["enabled"] else "mods_off")
+            t = get_font(20).render("{0}  v{1}   {2}".format(m["name"], m["version"], state),
+                                    True, COLOR_GOLD if m["enabled"] else COLOR_TEXT)
+            self.screen.blit(t, (80, y + 8))
+            if m["description"]:
+                d = get_font(15).render(m["description"], True, COLOR_DIM)
+                self.screen.blit(d, (80, y + 38))
+            y += 80
+        if len(mlist) > 7:
+            t = get_font(15).render(self._t("mods_more", n=len(mlist) - 7),
+                                    True, COLOR_DIM)
+            self.screen.blit(t, (60, y + 6))
+        if self.mod_errors:
+            t = get_font(15).render(self._t("mods_errors", s="; ".join(self.mod_errors)),
+                                    True, COLOR_RED)
+            self.screen.blit(t, (60, 636))
+        if self.mods_toast:
+            t = get_font(15).render(self.mods_toast, True, COLOR_GREEN)
+            self.screen.blit(t, (60, 664))
+        for b in self.buttons:
+            b.draw(self.screen)
+
     # ---------- Drawing ----------
 
     def draw(self):
         self.screen.fill(COLOR_BG)
         if self.screen_name == "menu":
             self._draw_menu()
+        elif self.screen_name == "mods":
+            self._draw_mods()
         elif self.screen_name == "lobby":
             self._draw_lobby()
         elif self.screen_name == "game":
@@ -730,6 +817,8 @@ class App:
 
     def _draw_menu(self):
         title = get_font(44).render(self._t("title"), True, COLOR_ACCENT)
+        self.screen.blit(gfx.title_logo(56),
+                         (W // 2 - title.get_width() // 2 - 76, 100 - 30))
         self.screen.blit(title, title.get_rect(center=(W // 2, 100)))
         sub = get_font(20).render(self._t("subtitle"), True, COLOR_DIM)
         self.screen.blit(sub, sub.get_rect(center=(W // 2, 142)))
@@ -814,7 +903,8 @@ class App:
         # Deck info only (discard piles are hidden and cannot be drawn from)
         t = get_font(16).render(self._t("deck_info", n=v.get("deck_count", 0)),
                                 True, COLOR_DIM)
-        self.screen.blit(t, (20, 46))
+        self.screen.blit(gfx.card_back(36, 52), (20, 42))
+        self.screen.blit(t, (64, 46))
 
         # Player panels (multi-line nameplates)
         plist = v.get("players", [])
@@ -827,14 +917,19 @@ class App:
             pygame.draw.rect(self.screen, COLOR_PANEL, (x, py, pw, ph), border_radius=8)
             tag = self._t("sheriff_tag") if i == v.get("sheriff") else ""
             col = COLOR_ACCENT if i == v.get("sheriff") else COLOR_TEXT
+            nx = x + 8
+            if i == v.get("sheriff"):
+                self.screen.blit(gfx.badge(20), (nx, py + 8))
+                nx += 24
             t = get_font(17).render(tag + p["name"], True, col)
-            self.screen.blit(t, (x + 8, py + 6))
+            self.screen.blit(t, (nx, py + 6))
             yy = py + 30
             gold = self._t("gold_hand", g=p["gold"], h=p["hand_count"])
             if p.get("bag_size"):
                 gold += "  " + self._t("bag_sealed", n=p["bag_size"])
+            self.screen.blit(gfx.coin(16), (x + 8, yy + 2))
             t = get_font(15).render(gold, True, COLOR_TEXT)
-            self.screen.blit(t, (x + 8, yy)); yy += 20
+            self.screen.blit(t, (x + 26, yy)); yy += 20
             if not p.get("connected", True):
                 t = get_font(15).render(self._t("offline_tag"), True, COLOR_RED)
                 self.screen.blit(t, (x + 8, yy)); yy += 20

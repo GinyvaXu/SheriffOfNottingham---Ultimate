@@ -2,7 +2,7 @@
 ; Compile: "C:\Users\zhenl\InnoSetup6\ISCC.exe" installer.iss
 
 #define MyAppName "Sheriff of Nottingham"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Sheriff Project"
 #define MyAppExeName "SheriffOfNottingham.exe"
 
@@ -12,6 +12,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+SetupIconFile=assets\icon.ico
 DefaultDirName={autopf}\SheriffOfNottingham
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
