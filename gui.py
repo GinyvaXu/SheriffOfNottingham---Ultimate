@@ -495,9 +495,10 @@ class App:
             if self.chat_input.handle(ev) == "submit":
                 self._send_chat()
             prompt = (self.view or {}).get("prompt") or {}
-            if prompt.get("kind") == "bribe":
+            if prompt.get("kind") in ("bribe", "inspect", "counter_bribe"):
                 self.gold_input.handle(ev)
-                self.msg_input.handle(ev)
+                if prompt.get("kind") == "bribe":
+                    self.msg_input.handle(ev)
         elif self.screen_name == "over":
             for b in self.buttons:
                 b.handle(ev)
@@ -946,9 +947,9 @@ class App:
                        value=c["value"], sub=sub)
             self.hand_buttons.append(b)
 
-        # Quick chat (left side, below buttons; hidden during bribe)
+        # Quick chat (left side, below buttons; hidden while the gold input is used)
         kind = prompt.get("kind")
-        if kind != "bribe":
+        if kind not in ("bribe", "inspect", "counter_bribe"):
             for i, ph in enumerate(lang.UI[self.lang]["phrases"]):
                 x = 40 + (i % 2) * 190
                 y = 668 + (i // 2) * 36
@@ -983,10 +984,22 @@ class App:
             self.buttons.append(Button((40, 610, 150, 42), self._t("btn_submit_bribe"), lambda: self._do_bribe()))
             self.buttons.append(Button((205, 610, 130, 42), self._t("btn_no_bribe"), lambda: self._do_bribe(none=True)))
         elif kind == "inspect":
-            self.buttons.append(Button((40, 610, 150, 42), self._t("btn_pass"),
+            can_counter = (prompt.get("bribe_gold", 0) > 0
+                           and prompt.get("round", 0) < prompt.get("max_round", 99))
+            self.buttons.append(Button((40, 610, 140, 42), self._t("btn_pass"),
                                        lambda: self._inspect_decision("pass")))
-            self.buttons.append(Button((205, 610, 150, 42), self._t("btn_inspect"),
+            self.buttons.append(Button((195, 610, 120, 42), self._t("btn_inspect"),
                                        lambda: self._inspect_decision("inspect")))
+            self.buttons.append(Button((330, 610, 150, 42), self._t("btn_counter"),
+                                       lambda: self._sheriff_counter(), enabled=can_counter))
+        elif kind == "counter_bribe":
+            can_counter = prompt.get("round", 0) < prompt.get("max_round", 99)
+            self.buttons.append(Button((40, 610, 140, 42), self._t("btn_accept"),
+                                       lambda: self._send({"t": "counter_response", "action": "accept"})))
+            self.buttons.append(Button((195, 610, 120, 42), self._t("btn_reject"),
+                                       lambda: self._send({"t": "counter_response", "action": "reject"})))
+            self.buttons.append(Button((330, 610, 150, 42), self._t("btn_counter"),
+                                       lambda: self._merchant_counter(), enabled=can_counter))
 
         # Black market reward submit buttons (next to each task, grayed until claimable)
         bm = v.get("black_market")
@@ -1051,6 +1064,16 @@ class App:
 
     def _inspect_decision(self, action):
         self._send({"t": "inspect_decision", "action": action})
+
+    def _sheriff_counter(self):
+        gold = self._parse_int(self.gold_input.text)
+        self._send({"t": "counter_bribe", "gold": gold})
+        self.gold_input.text = ""
+
+    def _merchant_counter(self):
+        gold = self._parse_int(self.gold_input.text)
+        self._send({"t": "counter_response", "action": "counter", "gold": gold})
+        self.gold_input.text = ""
 
     def _rebuild_over_ui(self):
         if self.closed:
@@ -1866,8 +1889,17 @@ class App:
                 note = f": {prompt['bribe_msg']}" if prompt.get("bribe_msg") else ""
                 instr = self._t("instr_inspect_bribe", name=prompt.get("owner", "?"),
                                 g=prompt.get("bribe_gold", 0), note=note)
+                if prompt.get("bribe_gold", 0) > 0 and \
+                        prompt.get("round", 0) < prompt.get("max_round", 99):
+                    instr += self._t("counter_left",
+                                     n=prompt.get("max_round", 99) - prompt.get("round", 0))
             else:
                 instr = self._t("instr_inspect", name=prompt.get("owner", "?"))
+        elif kind == "counter_bribe":
+            instr = self._t("instr_counter_bribe",
+                            d=prompt.get("demand", 0),
+                            o=prompt.get("last_offer", 0),
+                            n=prompt.get("max_round", 99) - prompt.get("round", 0))
         elif kind == "load_bag":
             instr = self._t("instr_load_bag") + "   " + self._t("selected_n", n=len(self.selected))
         elif kind:
@@ -1888,6 +1920,7 @@ class App:
                 "load": self._t("instr_waiting_load"),
                 "declare": self._t("instr_waiting_declare", name=acting),
                 "bribe": self._t("instr_waiting_bribe", name=acting),
+                "counter_bribe": self._t("instr_waiting_counter_bribe", name=acting),
                 "inspect": self._t("instr_waiting_inspect"),
             }.get(ap) or self._t("instr_waiting", name=acting)
         t = get_font(20).render(instr, True, COLOR_GREEN if kind else COLOR_DIM)
@@ -1924,11 +1957,14 @@ class App:
                 break
         self.chat_input.draw(self.screen)
 
-        if (prompt or {}).get("kind") == "bribe":
-            t = get_font(16).render(self._t("bribe_gold"), True, COLOR_TEXT)
+        pk = (prompt or {}).get("kind")
+        if pk in ("bribe", "inspect", "counter_bribe"):
+            label = self._t("bribe_gold") if pk == "bribe" else self._t("lbl_counter_amount")
+            t = get_font(16).render(label, True, COLOR_TEXT)
             self.screen.blit(t, (40, 646))
             self.gold_input.draw(self.screen)
-            self.msg_input.draw(self.screen)
+            if pk == "bribe":
+                self.msg_input.draw(self.screen)
 
     def _draw_black_market(self):
         v = self.view or {}

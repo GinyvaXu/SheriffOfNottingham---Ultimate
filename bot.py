@@ -206,7 +206,8 @@ def choose_bribe(g, seat, level, personality=None):
 # ---------- Sheriff: inspect or pass ----------
 
 def choose_inspect(g, sheriff_seat, level, personality=None):
-    """Sheriff decision for the current merchant (public info only)."""
+    """Sheriff decision for the current merchant (public info only).
+    Returns (action, gold): 'pass' | 'inspect' | 'counter' (gold = demand)."""
     target = g.players[g.inspect_current()]
     bribe = (target.bribe or {}).get("gold", 0)
     bag_n = len(target.bag)
@@ -214,8 +215,11 @@ def choose_inspect(g, sheriff_seat, level, personality=None):
     params = bot_params(level, personality)
     if level == "easy":
         if bag_n >= 3 and bribe <= 1:
-            return "inspect"
-        return "pass"
+            return "inspect", None
+        if bribe > 0 and bag_n >= 2 and rng.random() < 0.15:
+            demand = min(bribe + rng.randint(1, 2), target.gold)
+            return "counter", demand
+        return "pass", None
 
     score = bag_n * 1.5
     if bribe == 0:
@@ -226,6 +230,14 @@ def choose_inspect(g, sheriff_seat, level, personality=None):
         score += 1.3
     if _public_smuggle(target) > 0:
         score += 1.2
+    # A suspicious-looking merchant (big bag) who bribes little is worth
+    # squeezing for more gold instead of an all-or-nothing inspection.
+    if bribe > 0 and bag_n >= 2 and target.gold > bribe:
+        want_more = (bribe < 6 and rng.random() < 0.30 * params["bribe_tendency"]) \
+                 or (level == "hard" and bribe < 10 and rng.random() < 0.25)
+        if want_more:
+            demand = bribe + rng.randint(1, 4 if level == "hard" else 2)
+            return "counter", min(demand, target.gold)
     if level == "normal":
         score -= 1.0
         thresh = 4.0
@@ -233,7 +245,49 @@ def choose_inspect(g, sheriff_seat, level, personality=None):
         thresh = 4.2
     score += params["inspect_bias"] * 2.0
     score += rng.uniform(-1.0, 1.0)
-    return "inspect" if score >= thresh else "pass"
+    return ("inspect" if score >= thresh else "pass"), None
+
+
+def choose_respond(g, seat, level, personality=None):
+    """Merchant response to the Sheriff's counter-demand.
+    Returns (action, gold): 'accept' | 'reject' | 'counter' (gold = new offer)."""
+    p = g.players[seat]
+    demand = p.sheriff_demand or 0
+    cur = (p.bribe or {}).get("gold", 0)
+    rng = g.rng
+    params = bot_params(level, personality)
+    has_contra = any(game.is_contraband(c) for c in p.bag)
+    contra_val = sum(c["value"] for c in p.bag if game.is_contraband(c))
+    if has_contra:
+        # Smuggling is worth paying for: value of the hidden goods + a margin.
+        ceiling = contra_val + (0 if level == "easy" else rng.randint(2, 6))
+    else:
+        # Legal-only bag: fines are low, so a big bribe is usually a bad deal.
+        ceiling = rng.randint(1, 2) if level == "easy" else rng.randint(2, 4)
+    ceiling = max(ceiling, cur)
+    if level == "easy":
+        if demand <= ceiling or rng.random() < 0.8:
+            return "accept", 0
+        hi = min(demand - 1, p.gold)
+        if hi > cur:
+            return "counter", rng.randint(cur + 1, hi)
+        return "reject", 0
+    if level == "hard":
+        reject_margin, counter_p = 3, 0.65
+    elif level == "normal":
+        reject_margin, counter_p = 6, 0.5
+    else:
+        reject_margin, counter_p = 99, 0.2
+    if demand <= ceiling:
+        return "accept", 0
+    if demand > ceiling + reject_margin:
+        return "reject", 0
+    hi = min(demand - 1, p.gold)
+    if hi <= cur:
+        return "reject", 0
+    if rng.random() < counter_p:
+        return "counter", rng.randint(cur + 1, hi)
+    return "accept", 0
 
 
 # ---------- Black market: auto-submit when eligible ----------

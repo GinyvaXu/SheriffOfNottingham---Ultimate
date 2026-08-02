@@ -418,6 +418,18 @@ class GameServer:
                     if b.get("msg"):
                         pub += f": {b['msg']}"
                     banner = pub
+        elif t == "counter_bribe":
+            ok, res = g.do_counter_bribe(gseat, msg.get("gold", 0))
+            if ok:
+                events = res
+            else:
+                banner = res[0] if res else "Action failed"
+        elif t == "counter_response":
+            ok, res = g.do_respond_counter(gseat, msg.get("action", ""), msg.get("gold", 0))
+            if ok:
+                events = res
+            else:
+                banner = res[0] if res else "Action failed"
         elif t == "inspect_decision":
             ok, res = g.do_inspect_decision(gseat, msg.get("action"))
             if ok:
@@ -515,9 +527,12 @@ class GameServer:
                         acted = self._bot_declare(seat)
                     elif g.phase == "INSPECT":
                         target = g.inspect_current()
-                        if self._is_bot(target) and g.players[target].bribe is None:
+                        tp = g.players[target]
+                        if self._is_bot(target) and tp.bribe is None:
                             acted = self._bot_bribe(target)
-                        elif g.players[target].bribe is not None and self._is_bot(g.sheriff):
+                        elif self._is_bot(target) and tp.sheriff_demand is not None:
+                            acted = self._bot_counter_response(target)
+                        elif tp.bribe is not None and tp.sheriff_demand is None and self._is_bot(g.sheriff):
                             acted = self._bot_inspect_decision()
                         else:
                             return
@@ -589,8 +604,23 @@ class GameServer:
 
     def _bot_inspect_decision(self):
         g = self.game
-        action = bot.choose_inspect(g, g.sheriff, self._bot_level(g.sheriff), self._bot_personality(g.sheriff))
-        ok, events = g.do_inspect_decision(g.sheriff, action)
+        action, gold = bot.choose_inspect(g, g.sheriff, self._bot_level(g.sheriff),
+                                          self._bot_personality(g.sheriff))
+        if action == "counter":
+            ok, events = g.do_counter_bribe(g.sheriff, gold or 0)
+        else:
+            ok, events = g.do_inspect_decision(g.sheriff, action)
+        if ok:
+            for e in events:
+                self._broadcast({"t": "banner", "msg": e})
+        self._broadcast_views()
+        return ok
+
+    def _bot_counter_response(self, target):
+        g = self.game
+        action, gold = bot.choose_respond(g, target, self._bot_level(target),
+                                          self._bot_personality(target))
+        ok, events = g.do_respond_counter(target, action, gold or 0)
         if ok:
             for e in events:
                 self._broadcast({"t": "banner", "msg": e})
@@ -648,10 +678,16 @@ class GameServer:
             target = g.players[g.inspect_current()]
             if gseat == g.inspect_current() and target.bribe is None:
                 return {"kind": "bribe", "gold": target.gold}
-            if gseat == g.sheriff and target.bribe is not None:
+            if gseat == g.inspect_current() and target.sheriff_demand is not None:
+                return {"kind": "counter_bribe", "owner": target.name,
+                        "demand": target.sheriff_demand,
+                        "last_offer": target.bribe.get("gold", 0) if target.bribe else 0,
+                        "round": target.bribe_round, "max_round": game.BRIBE_MAX_ROUNDS}
+            if gseat == g.sheriff and target.bribe is not None and target.sheriff_demand is None:
                 return {"kind": "inspect", "owner": target.name,
                         "bribe_gold": target.bribe.get("gold", 0),
-                        "bribe_msg": target.bribe.get("msg", "")}
+                        "bribe_msg": target.bribe.get("msg", ""),
+                        "round": target.bribe_round, "max_round": game.BRIBE_MAX_ROUNDS}
         return None
 
     def _acting_name(self):
@@ -664,8 +700,9 @@ class GameServer:
             return g.players[g.declare_current()].name
         if g.phase == "INSPECT":
             t = g.inspect_current()
-            if g.players[t].bribe is None:
-                return g.players[t].name
+            tp = g.players[t]
+            if tp.bribe is None or tp.sheriff_demand is not None:
+                return tp.name
             return g.players[g.sheriff].name
         return None
 
@@ -680,8 +717,11 @@ class GameServer:
         if g.phase == "DECLARE":
             return "declare"
         if g.phase == "INSPECT":
-            if g.players[g.inspect_current()].bribe is None:
+            tp = g.players[g.inspect_current()]
+            if tp.bribe is None:
                 return "bribe"
+            if tp.sheriff_demand is not None:
+                return "counter_bribe"
             return "inspect"
         return None
 
@@ -768,6 +808,12 @@ class GameServer:
             ok, banner = g.do_declare(gseat, msg.get("type"))
         elif t == "bribe":
             ok, banner = g.do_bribe(gseat, msg.get("gold", 0), "")
+        elif t == "counter_response":
+            ok, res = g.do_respond_counter(gseat, msg.get("action", "accept"), msg.get("gold", 0))
+            if ok:
+                events = res
+            else:
+                banner = res[0] if res else "Action failed"
         elif t == "inspect_decision":
             ok, res = g.do_inspect_decision(gseat, msg.get("action", "pass"))
             if ok:
@@ -831,7 +877,15 @@ class GameServer:
                         if seat_i is not None:
                             self._force_action(seat_i, "bribe", {"gold": 0})
                             continue
-                    if p.bribe is not None and not self._is_bot(g.sheriff):
+                    if p.sheriff_demand is not None and not self._is_bot(cur):
+                        # merchant must answer the sheriff's counter-offer -> auto accept
+                        seat_i = next((i for i, s in enumerate(self.seats)
+                                       if s is not None and s.get("game_seat") == cur), None)
+                        if seat_i is not None:
+                            self._force_action(seat_i, "counter_response",
+                                               {"action": "accept", "gold": 0})
+                            continue
+                    if p.bribe is not None and p.sheriff_demand is None and not self._is_bot(g.sheriff):
                         gseat = g.sheriff
                 if gseat is None:
                     continue

@@ -116,6 +116,10 @@ REP_HAND_AT = 5      # refills to HAND_SIZE+1 at round end
 # default action. 0 = no timer (classic indefinite wait).
 ACTION_TIMEOUT = 0
 
+# Bribe bargaining: max counter-offers exchanged per negotiation (both sides
+# combined). When reached, only accept/reject (or pass/inspect) remain.
+BRIBE_MAX_ROUNDS = 3
+
 
 def _card_counts(players):
     """Card-count table key: 3-player numbers for <=3 players, 4-6 otherwise."""
@@ -189,7 +193,9 @@ class Player:
         self.stand_legal = []
         self.stand_contra = []
         self.decl = None      # {"type":..., "count":...}
-        self.bribe = None     # {"gold":..., "msg":...}
+        self.bribe = None     # {"gold":..., "msg":...} merchant's standing offer
+        self.sheriff_demand = None  # sheriff's counter-demand in gold (bargaining)
+        self.bribe_round = 0        # counter-offers exchanged so far
         self.connected = True
         self.black_market_cards = 0   # black-market reward cards held (+25 each at game end)
         self.reputation = 0           # merchant reputation (rule mod)
@@ -289,6 +295,8 @@ class Game:
             p.bag_loaded = False
             p.decl = None
             p.bribe = None
+            p.sheriff_demand = None
+            p.bribe_round = 0
         self.order = [(self.sheriff + i) % self.n for i in range(1, self.n)]
         if ROUTE_BONUS:
             pool = [t for t in LEGAL if GOODS[t]["cnt%d" % _card_counts(self.n)] > 0
@@ -428,9 +436,124 @@ class Game:
         if seat != self.inspect_current():
             return False, "Not your turn"
         p = self.players[seat]
+        if p.bribe is not None:
+            return False, "A bribe was already offered"
         gold = max(0, min(int(gold or 0), p.gold))
         p.bribe = {"gold": gold, "msg": (msg or "")[:80]}
+        p.sheriff_demand = None
+        p.bribe_round = 0
         return True, ""
+
+    def do_counter_bribe(self, sheriff_seat, gold):
+        """Sheriff makes a counter-demand on the merchant's standing offer."""
+        if self.phase != "INSPECT":
+            return False, ["Not the inspection phase"]
+        if sheriff_seat != self.sheriff:
+            return False, ["You are not the sheriff"]
+        owner = self.players[self.inspect_current()]
+        if owner.bribe is None:
+            return False, ["No bribe to negotiate"]
+        if owner.sheriff_demand is not None:
+            return False, ["The merchant must respond to the counter-offer first"]
+        cur = owner.bribe.get("gold", 0)
+        if cur <= 0:
+            return False, ["Nothing to negotiate: the merchant offered no bribe"]
+        if owner.bribe_round >= BRIBE_MAX_ROUNDS:
+            return False, ["No more counter-offers allowed"]
+        try:
+            gold = max(0, int(gold or 0))
+        except (TypeError, ValueError):
+            return False, ["Invalid amount"]
+        if gold <= cur:
+            return False, ["Counter-offer must be more than the current offer ({0} gold)".format(cur)]
+        if gold > owner.gold:
+            return False, ["The merchant only has {0} gold".format(owner.gold)]
+        owner.sheriff_demand = gold
+        owner.bribe_round += 1
+        return True, ["{0} demands {1} gold from {2}".format(
+            self.players[sheriff_seat].name, gold, owner.name)]
+
+    def do_respond_counter(self, seat, action, gold=0):
+        """Merchant answers the Sheriff's counter-demand: accept / reject / counter."""
+        if self.phase != "INSPECT":
+            return False, ["Not the inspection phase"]
+        if seat != self.inspect_current():
+            return False, ["Not your turn"]
+        owner = self.players[seat]
+        if owner.sheriff_demand is None:
+            return False, ["No counter-offer pending"]
+        sheriff = self.players[self.sheriff]
+        demand = owner.sheriff_demand
+        cur = owner.bribe.get("gold", 0) if owner.bribe else 0
+        if action == "accept":
+            owner.bribe["gold"] = demand
+            events = ["{0} accepts the counter-offer of {1} gold".format(owner.name, demand)]
+            self._settle_pass(owner, sheriff, events)
+            self._next_merchant(owner, events)
+            return True, events
+        if action == "reject":
+            owner.bribe = {"gold": 0, "msg": ""}
+            owner.sheriff_demand = None
+            return True, ["{0} rejects the counter-offer".format(owner.name)]
+        if action == "counter":
+            if owner.bribe_round >= BRIBE_MAX_ROUNDS:
+                return False, ["No more counter-offers allowed"]
+            try:
+                gold = max(0, int(gold or 0))
+            except (TypeError, ValueError):
+                return False, ["Invalid amount"]
+            if gold <= cur:
+                return False, ["Counter-offer must be more than your current offer ({0} gold)".format(cur)]
+            if gold >= demand:
+                return False, ["Counter-offer must be less than the Sheriff's demand ({0} gold)".format(demand)]
+            if gold > owner.gold:
+                return False, ["Not enough gold"]
+            owner.bribe["gold"] = gold
+            owner.sheriff_demand = None
+            owner.bribe_round += 1
+            return True, ["{0} counters with {1} gold".format(owner.name, gold)]
+        return False, ["Unknown response"]
+
+    def _settle_pass(self, owner, sheriff, events):
+        """Pay the agreed bribe and deliver the bag (sheriff passed / deal struck)."""
+        bribe = owner.bribe or {"gold": 0, "msg": ""}
+        if bribe["gold"] > 0:
+            if BRIBE_POT_RATIO > 0:
+                total = min(int(bribe["gold"]), owner.gold)
+                owner.gold -= total
+                pot_share = int(total * BRIBE_POT_RATIO)
+                sheriff.gold += total - pot_share
+                self.pot += pot_share
+                events.append("{0} bribes the Sheriff {1} gold "
+                              "({2} gold goes to the public pot)".format(
+                                  owner.name, total - pot_share, pot_share))
+            else:
+                res = transfer(owner, sheriff, bribe["gold"])
+                events.append("{0} bribes the Sheriff {1} gold".format(owner.name, bribe["gold"]))
+                if res != "pays {0} gold".format(bribe["gold"]):
+                    events.append(res)
+        if bribe["msg"]:
+            events.append("{0}'s promise: {1}".format(owner.name, bribe["msg"]))
+        for c in owner.bag:
+            events.extend(self._deliver(owner, c))
+        self._route_bonus(owner, owner.bag, events)
+        events.append("{0} passes unchecked ({1} card(s) enter)".format(
+            owner.name, len(owner.bag)))
+
+    def _next_merchant(self, owner, events):
+        owner.bag = []
+        owner.bag_loaded = False
+        owner.bribe = None
+        owner.sheriff_demand = None
+        owner.bribe_round = 0
+        self.inspect_idx += 1
+        if self.inspect_idx >= len(self.order):
+            self.end_round()
+            if self.phase == "GAME_OVER":
+                events.append("Game over! See results.")
+            else:
+                events.append("Round {0} complete. Round {1} starts.".format(
+                    self.round_no - 1, self.round_no))
 
     def do_inspect_decision(self, sheriff_seat, action):
         if self.phase != "INSPECT":
@@ -441,29 +564,11 @@ class Game:
             return False, ["Unknown decision"]
         owner = self.players[self.inspect_current()]
         sheriff = self.players[self.sheriff]
+        if owner.sheriff_demand is not None:
+            return False, ["The merchant must respond to the counter-offer first"]
         events = []
-        bribe = owner.bribe or {"gold": 0, "msg": ""}
         if action == "pass":
-            if bribe["gold"] > 0:
-                if BRIBE_POT_RATIO > 0:
-                    total = min(int(bribe["gold"]), owner.gold)
-                    owner.gold -= total
-                    pot_share = int(total * BRIBE_POT_RATIO)
-                    sheriff.gold += total - pot_share
-                    self.pot += pot_share
-                    events.append(f"{owner.name} bribes the Sheriff {total - pot_share} gold "
-                                  f"({pot_share} gold goes to the public pot)")
-                else:
-                    res = transfer(owner, sheriff, bribe["gold"])
-                    events.append(f"{owner.name} bribes the Sheriff {bribe['gold']} gold")
-                    if res != f"pays {bribe['gold']} gold":
-                        events.append(res)
-            if bribe["msg"]:
-                events.append(f"{owner.name}'s promise: {bribe['msg']}")
-            for c in owner.bag:
-                events.extend(self._deliver(owner, c))
-            self._route_bonus(owner, owner.bag, events)
-            events.append(f"{owner.name} passes unchecked ({len(owner.bag)} card(s) enter)")
+            self._settle_pass(owner, sheriff, events)
         else:
             decl_type = owner.decl["type"]
             declared = [c for c in owner.bag if c["type"] == decl_type]
@@ -474,12 +579,12 @@ class Game:
                 for c in owner.bag:
                     events.extend(self._deliver(owner, c))
                 self._route_bonus(owner, owner.bag, events)
-                events.append(f"Inspection of {owner.name}: TRUTH! Sheriff pays {penalty} gold")
-                if res != f"pays {penalty} gold":
+                events.append("Inspection of {0}: TRUTH! Sheriff pays {1} gold".format(owner.name, penalty))
+                if res != "pays {0} gold".format(penalty):
                     events.append(res)
                 if REPUTATION:
                     owner.reputation += 1
-                    events.append(f"{owner.name}'s reputation +1 -> {owner.reputation}")
+                    events.append("{0}'s reputation +1 -> {1}".format(owner.name, owner.reputation))
             else:
                 for c in declared:
                     events.extend(self._deliver(owner, c))
@@ -490,36 +595,28 @@ class Game:
                     events.extend(self._deliver(owner, c))
                 self.d1.extend(seized)
                 if seized:
-                    detail = ", ".join(f"{TYPE_EN[t]}x{n}" for t, n in _counts(seized).items())
+                    detail = ", ".join("{0}x{1}".format(TYPE_EN[t], n) for t, n in _counts(seized).items())
                     fine = sum(c.get("fine", c["value"]) for c in seized)
                     if REPUTATION and owner.reputation >= REP_FINE_AT:
                         fine = int(fine * 0.9)
-                        events.append(f"{owner.name}'s reputation discounts the fine by 10%")
+                        events.append("{0}'s reputation discounts the fine by 10%".format(owner.name))
                     res = transfer(owner, sheriff, fine)
                     events.append(
-                        f"Inspection of {owner.name}: LIE! {len(seized)} contraband seized "
-                        f"({detail}), merchant pays {fine} gold fine, "
-                        f"{len(passed)} legal card(s) enter")
-                    if res != f"pays {fine} gold":
+                        "Inspection of {0}: LIE! {1} contraband seized "
+                        "({2}), merchant pays {3} gold fine, "
+                        "{4} legal card(s) enter".format(
+                            owner.name, len(seized), detail, fine, len(passed)))
+                    if res != "pays {0} gold".format(fine):
                         events.append(res)
                 else:
                     events.append(
-                        f"Inspection of {owner.name}: LIE but all legal - "
-                        f"{len(hidden)} card(s) enter, nothing seized")
+                        "Inspection of {0}: LIE but all legal - "
+                        "{1} card(s) enter, nothing seized".format(owner.name, len(hidden)))
                 self._route_bonus(owner, owner.bag, events)
                 if REPUTATION:
                     owner.reputation -= 1
-                    events.append(f"{owner.name}'s reputation -1 -> {owner.reputation}")
-        owner.bag = []
-        owner.bag_loaded = False
-        owner.bribe = None
-        self.inspect_idx += 1
-        if self.inspect_idx >= len(self.order):
-            self.end_round()
-            if self.phase == "GAME_OVER":
-                events.append("Game over! See results.")
-            else:
-                events.append(f"Round {self.round_no - 1} complete. Round {self.round_no} starts.")
+                    events.append("{0}'s reputation -1 -> {1}".format(owner.name, owner.reputation))
+        self._next_merchant(owner, events)
         return True, events
 
     def _route_bonus(self, player, cards, events):

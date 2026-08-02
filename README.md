@@ -203,7 +203,9 @@ with Inno Setup:
 - **Market**: choose hand cards to discard (0-5), then draw the same number back from the deck.
 - **Load**: secretly pick 1-5 cards into your bag, then seal it.
 - **Declare**: pick a legal goods type and confirm (card count is forced = bag size; the type may be a lie).
-- **Inspect**: the bag owner may bribe (gold + note); the sheriff decides pass or inspect.
+- **Inspect**: the bag owner may bribe (gold + note); the sheriff can accept it, pass,
+  inspect, or **counter with a higher demand** - the merchant may then accept, reject,
+  or counter again (up to 3 counter-offers per negotiation, then accept/reject only).
 - **Chat**: bottom-right input, Enter to send; quick-chat buttons are also available.
 
 ## Game over / back to lobby
@@ -236,7 +238,7 @@ python test_ai_bots.py --rounds 2     # in-lobby AI bots
 - Bilingual UI (Chinese default; font loader keeps CJK system fonts as fallback).
 - Plaintext TCP, no encryption or anti-cheat.
 - Direct public connection depends on NAT type; use frp/ngrok as relay if it fails.
-- Bribes simplified to gold + note; no goods/promise validation.
+- Bribes are gold + note with counter-offer bargaining (up to 3 rounds); no goods/promise validation.
 
 ## Package to exe
 
@@ -246,7 +248,7 @@ python -m PyInstaller --clean --noconfirm SheriffOfNottingham.spec
 ```
 
 - Produces `dist\SheriffOfNottingham.exe` (~41 MB, single file, no Python install
-  needed) with version info 1.1.0 and a bundled `mods\` copy; the running exe
+  needed) with version info 1.6.0 and a bundled `mods\` copy; the running exe
   reads `mods\` **next to itself**, so you can add/remove mods freely.
 - The first run as host triggers a Windows Firewall prompt; allow it to open the port.
 - To see error output, package with `--console` or run `python main.py` directly.
