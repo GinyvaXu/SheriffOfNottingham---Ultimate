@@ -1,0 +1,18 @@
+﻿# build artifacts
+build/
+dist/
+*.spec
+
+# python cache
+__pycache__/
+*.pyc
+
+# local verification screenshots
+cap_*.png
+smoke2*.png
+
+# editor / os
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
