@@ -4,15 +4,15 @@
     {
       "id": "cyberpunk",
       "folder": "cyberpunk_mod",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "reskin",
       "name": {
         "en": "Cyberpunk Overlay",
-        "zh": "赛博朋克换皮"
+        "zh": "\u8d5b\u535a\u670b\u514b\u6362\u76ae"
       },
       "description": {
         "en": "Neon reskin with iconic cyberpunk goods: rail-guns, neuro-stims, night-brew and memory silk. Client-side only. Includes themed avatars matching the reskin.",
-        "zh": "霓虹赛博风格：磁轨枪、神经兴奋剂、夜酿与记忆丝绸等未来都市货物。仅客户端生效。附带配套主题头像。"
+        "zh": "\u9713\u8679\u8d5b\u535a\u98ce\u683c\uff1a\u78c1\u8f68\u67aa\u3001\u795e\u7ecf\u5174\u594b\u5242\u3001\u591c\u917f\u4e0e\u8bb0\u5fc6\u4e1d\u7ef8\u7b49\u672a\u6765\u90fd\u5e02\u8d27\u7269\u3002\u4ec5\u5ba2\u6237\u7aef\u751f\u6548\u3002\u9644\u5e26\u914d\u5957\u4e3b\u9898\u5934\u50cf\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/cyberpunk_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/cyberpunk_mod.zip"
@@ -20,15 +20,15 @@
     {
       "id": "medieval",
       "folder": "medieval_mod",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "reskin",
       "name": {
         "en": "Medieval England",
-        "zh": "中世纪英格兰"
+        "zh": "\u4e2d\u4e16\u7eaa\u82f1\u683c\u5170"
       },
       "description": {
         "en": "Medieval reskin with period goods: fattened capons, monastery cheese, oat loaves and monks' mead. Client-side only. Includes themed avatars matching the reskin.",
-        "zh": "中世纪换皮：肥育阉鸡、修道院奶酪、燕麦面包与修士蜜酒等时代货物。仅客户端生效。附带配套主题头像。"
+        "zh": "\u4e2d\u4e16\u7eaa\u6362\u76ae\uff1a\u80a5\u80b2\u9609\u9e21\u3001\u4fee\u9053\u9662\u5976\u916a\u3001\u71d5\u9ea6\u9762\u5305\u4e0e\u4fee\u58eb\u871c\u9152\u7b49\u65f6\u4ee3\u8d27\u7269\u3002\u4ec5\u5ba2\u6237\u7aef\u751f\u6548\u3002\u9644\u5e26\u914d\u5957\u4e3b\u9898\u5934\u50cf\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/medieval_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/medieval_mod.zip"
@@ -36,15 +36,15 @@
     {
       "id": "starlight",
       "folder": "starlight_mod",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "reskin",
       "name": {
         "en": "Starlight Colony",
-        "zh": "星光殖民地"
+        "zh": "\u661f\u5149\u6b96\u6c11\u5730"
       },
       "description": {
         "en": "Space-faring reskin with colony goods: hydroponic fruit, protein slabs, plasma rifles and nebula wine. Client-side only. Includes themed avatars matching the reskin.",
-        "zh": "星际殖民换皮：水培果、蛋白块、等离子步枪与星云酒等殖民地货物。仅客户端生效。附带配套主题头像。"
+        "zh": "\u661f\u9645\u6b96\u6c11\u6362\u76ae\uff1a\u6c34\u57f9\u679c\u3001\u86cb\u767d\u5757\u3001\u7b49\u79bb\u5b50\u6b65\u67aa\u4e0e\u661f\u4e91\u9152\u7b49\u6b96\u6c11\u5730\u8d27\u7269\u3002\u4ec5\u5ba2\u6237\u7aef\u751f\u6548\u3002\u9644\u5e26\u914d\u5957\u4e3b\u9898\u5934\u50cf\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/starlight_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/starlight_mod.zip"
@@ -52,15 +52,15 @@
     {
       "id": "steampunk",
       "folder": "steampunk_mod",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "reskin",
       "name": {
         "en": "Steamforge City",
-        "zh": "蒸汽锻炉城"
+        "zh": "\u84b8\u6c7d\u953b\u7089\u57ce"
       },
       "description": {
         "en": "Steampunk reskin with brass-age goods: clockwork fowl, cog-cheese, steam rifles and coal whiskey. Client-side only. Includes themed avatars matching the reskin.",
-        "zh": "蒸汽朋克换皮：发条禽、齿轮奶酪、蒸汽步枪与煤烟威士忌等黄铜时代货物。仅客户端生效。附带配套主题头像。"
+        "zh": "\u84b8\u6c7d\u670b\u514b\u6362\u76ae\uff1a\u53d1\u6761\u79bd\u3001\u9f7f\u8f6e\u5976\u916a\u3001\u84b8\u6c7d\u6b65\u67aa\u4e0e\u7164\u70df\u5a01\u58eb\u5fcc\u7b49\u9ec4\u94dc\u65f6\u4ee3\u8d27\u7269\u3002\u4ec5\u5ba2\u6237\u7aef\u751f\u6548\u3002\u9644\u5e26\u914d\u5957\u4e3b\u9898\u5934\u50cf\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/steampunk_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/steampunk_mod.zip"
@@ -68,15 +68,15 @@
     {
       "id": "arcane",
       "folder": "arcane_mod",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "reskin",
       "name": {
         "en": "Arcane Realms",
-        "zh": "奥术秘境"
+        "zh": "\u5965\u672f\u79d8\u5883"
       },
       "description": {
         "en": "Fantasy reskin with arcane goods: fey fruit, familiar hens, arcane staves and elven wine. Client-side only. Includes themed avatars matching the reskin.",
-        "zh": "魔法世界观换皮：仙灵果、使魔母鸡、奥术法杖与精灵酒等秘法货物。仅客户端生效。附带配套主题头像。"
+        "zh": "\u9b54\u6cd5\u4e16\u754c\u89c2\u6362\u76ae\uff1a\u4ed9\u7075\u679c\u3001\u4f7f\u9b54\u6bcd\u9e21\u3001\u5965\u672f\u6cd5\u6756\u4e0e\u7cbe\u7075\u9152\u7b49\u79d8\u6cd5\u8d27\u7269\u3002\u4ec5\u5ba2\u6237\u7aef\u751f\u6548\u3002\u9644\u5e26\u914d\u5957\u4e3b\u9898\u5934\u50cf\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/arcane_mod.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/arcane_mod.zip"
@@ -84,15 +84,15 @@
     {
       "id": "marathon_market",
       "folder": "rules_marathon_market",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "rules",
       "name": {
         "en": "Marathon Market",
-        "zh": "马拉松集市"
+        "zh": "\u9a6c\u62c9\u677e\u96c6\u5e02"
       },
       "description": {
         "en": "Rule mod: lengthens the match to 3 rounds per player (4 for 3-player games). All players in a room need this mod installed.",
-        "zh": "规则模组：延长对局，每名玩家默认两回合改为三回合（3人局为4回合）。房间内所有玩家都需安装此模组。"
+        "zh": "\u89c4\u5219\u6a21\u7ec4\uff1a\u5ef6\u957f\u5bf9\u5c40\uff0c\u6bcf\u540d\u73a9\u5bb6\u9ed8\u8ba4\u4e24\u56de\u5408\u6539\u4e3a\u4e09\u56de\u5408\uff083\u4eba\u5c40\u4e3a4\u56de\u5408\uff09\u3002\u623f\u95f4\u5185\u6240\u6709\u73a9\u5bb6\u90fd\u9700\u5b89\u88c5\u6b64\u6a21\u7ec4\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_marathon_market.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_marathon_market.zip"
@@ -100,15 +100,15 @@
     {
       "id": "spice_road",
       "folder": "rules_spice_road",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "rules",
       "name": {
         "en": "Spice Road",
-        "zh": "香料之路"
+        "zh": "\u9999\u6599\u4e4b\u8def"
       },
       "description": {
         "en": "Rule mod: adds a new legal goods (Pepper) and a new contraband (Tea). All players in a room need this mod installed.",
-        "zh": "规则模组：新增合法货物胡椒与违禁品茶叶。房间内所有玩家都需安装此模组。"
+        "zh": "\u89c4\u5219\u6a21\u7ec4\uff1a\u65b0\u589e\u5408\u6cd5\u8d27\u7269\u80e1\u6912\u4e0e\u8fdd\u7981\u54c1\u8336\u53f6\u3002\u623f\u95f4\u5185\u6240\u6709\u73a9\u5bb6\u90fd\u9700\u5b89\u88c5\u6b64\u6a21\u7ec4\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_spice_road.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_spice_road.zip"
@@ -116,15 +116,15 @@
     {
       "id": "bribe_pot",
       "folder": "rules_bribe_pot",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "rules",
       "name": {
         "en": "Bribe Economics",
-        "zh": "赏金经济"
+        "zh": "\u8d4f\u91d1\u7ecf\u6d4e"
       },
       "description": {
         "en": "Half of every accepted bribe goes into a public pot split equally at game end.",
-        "zh": "每笔被接受的赏金有一半进入公开赏金池，结束时均分。"
+        "zh": "\u6bcf\u7b14\u88ab\u63a5\u53d7\u7684\u8d4f\u91d1\u6709\u4e00\u534a\u8fdb\u5165\u516c\u5f00\u8d4f\u91d1\u6c60\uff0c\u7ed3\u675f\u65f6\u5747\u5206\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_bribe_pot.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_bribe_pot.zip"
@@ -132,15 +132,15 @@
     {
       "id": "night_market",
       "folder": "rules_night_market",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "rules",
       "name": {
         "en": "Night Market Timer",
-        "zh": "夜市场时限"
+        "zh": "\u591c\u5e02\u573a\u65f6\u9650"
       },
       "description": {
         "en": "40-second action timer per phase; timeout auto-plays a sensible default.",
-        "zh": "每个阶段 40 秒动作倒计时，超时自动执行默认动作。"
+        "zh": "\u6bcf\u4e2a\u9636\u6bb5 40 \u79d2\u52a8\u4f5c\u5012\u8ba1\u65f6\uff0c\u8d85\u65f6\u81ea\u52a8\u6267\u884c\u9ed8\u8ba4\u52a8\u4f5c\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_night_market.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_night_market.zip"
@@ -148,15 +148,15 @@
     {
       "id": "trade_caravans",
       "folder": "rules_trade_caravans",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "rules",
       "name": {
         "en": "Trade Caravans",
-        "zh": "车队商路"
+        "zh": "\u8f66\u961f\u5546\u8def"
       },
       "description": {
         "en": "A public route per round; +4 gold per legal route card delivered past the sheriff.",
-        "zh": "每回合公开商路，指定法定货物每张过关 +4 金。"
+        "zh": "\u6bcf\u56de\u5408\u516c\u5f00\u5546\u8def\uff0c\u6307\u5b9a\u6cd5\u5b9a\u8d27\u7269\u6bcf\u5f20\u8fc7\u5173 +4 \u91d1\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_trade_caravans.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_trade_caravans.zip"
@@ -164,15 +164,15 @@
     {
       "id": "guild_contracts",
       "folder": "rules_guild_contracts",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "rules",
       "name": {
         "en": "Guild Contracts",
-        "zh": "行会契约"
+        "zh": "\u884c\u4f1a\u5951\u7ea6"
       },
       "description": {
         "en": "Secret delivery contracts at game start; fulfilled ones pay gold at the end.",
-        "zh": "开局发放秘密契约，完成后结算金币奖励。"
+        "zh": "\u5f00\u5c40\u53d1\u653e\u79d8\u5bc6\u5951\u7ea6\uff0c\u5b8c\u6210\u540e\u7ed3\u7b97\u91d1\u5e01\u5956\u52b1\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_guild_contracts.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_guild_contracts.zip"
@@ -180,15 +180,15 @@
     {
       "id": "royal_favor",
       "folder": "rules_royal_favor",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "rules",
       "name": {
         "en": "Royal Favor",
-        "zh": "皇家恩宠"
+        "zh": "\u7687\u5bb6\u6069\u5ba0"
       },
       "description": {
         "en": "Royal cards build favor; milestones 2/4/6 pay +6/+10/+18 instantly.",
-        "zh": "皇家卡累计恩宠，2/4/6 张触发 +6/+10/+18 金。"
+        "zh": "\u7687\u5bb6\u5361\u7d2f\u8ba1\u6069\u5ba0\uff0c2/4/6 \u5f20\u89e6\u53d1 +6/+10/+18 \u91d1\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_royal_favor.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_royal_favor.zip"
@@ -196,15 +196,15 @@
     {
       "id": "merchant_reputation",
       "folder": "rules_merchant_reputation",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "category": "rules",
       "name": {
         "en": "Merchant Reputation",
-        "zh": "商人声望"
+        "zh": "\u5546\u4eba\u58f0\u671b"
       },
       "description": {
         "en": "Honesty earns reputation; perks at 1/3/5 (extra discard, fine discount, 7-card hand).",
-        "zh": "说真话获得声望，1/3/5 点解锁多弃牌/罚金折扣/7张手牌。"
+        "zh": "\u8bf4\u771f\u8bdd\u83b7\u5f97\u58f0\u671b\uff0c1/3/5 \u70b9\u89e3\u9501\u591a\u5f03\u724c/\u7f5a\u91d1\u6298\u6263/7\u5f20\u624b\u724c\u3002"
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_merchant_reputation.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_merchant_reputation.zip"

@@ -1,8 +1,8 @@
-; Sheriff of Nottingham - Inno Setup installer script (v1.5.1)
+; Sheriff of Nottingham - Inno Setup installer script (v1.5.2)
 ; Compile: "C:\Users\zhenl\InnoSetup6\ISCC.exe" installer.iss
 
 #define MyAppName "Sheriff of Nottingham"
-#define MyAppVersion "1.5.1"
+#define MyAppVersion "1.5.2"
 #define MyAppPublisher "Sheriff Project"
 #define MyAppExeName "SheriffOfNottingham.exe"
 

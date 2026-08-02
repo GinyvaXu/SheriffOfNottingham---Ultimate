@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """UI text and server-message translation (English is the canonical wire language)."""
 
 import re
@@ -191,8 +191,8 @@ UI = {
         "update_open_page": "Open Releases Page",
         "update_notes": "Release notes: ",
         "update_banner": "New version v{ver} available - click Update in the menu",
-        "lbl_rounds": "Rounds",
-        "ph_rounds": "Rounds (e.g. 9)",
+        "lbl_rounds": "Turns",
+        "ph_rounds": "Turns (e.g. 9)",
         "btn_rename": "Rename",
         "selected_n": "Selected {n} card(s)",
         "smuggle_secret": "smuggle: hidden x{n}",
@@ -241,6 +241,12 @@ UI = {
         "contracts_chip": "{t} {n}/{m}",
         "update_changelog": "What's new in v{v}:",
         "update_scroll_hint": "Mouse wheel scrolls the notes",
+        "menu_whatsnew": "What's New",
+        "menu_news_none": "Release notes will appear here after checking for updates.",
+        "menu_news_checking": "Checking for updates...",
+        "menu_news_uptodate": "v{v} - you are up to date.",
+        "menu_news_hint": "Scroll for more",
+        "list_scroll_hint": "Scroll to see more items",
         "over_pot": "Bribe pot",
 
         "pers_title": "Bot personality",
@@ -415,8 +421,8 @@ UI = {
         "update_open_page": "打开发布页",
         "update_notes": "更新说明：",
         "update_banner": "发现新版本 v{ver}，请在菜单点击「检查更新」",
-        "lbl_rounds": "\u8f6e\u6570",
-        "ph_rounds": "\u8f6e\u6570(\u59829)",
+        "lbl_rounds": "\u56de\u5408\u6570",
+        "ph_rounds": "\u56de\u5408\u6570(\u59829)",
         "btn_rename": "\u6539\u540d",
         "selected_n": "\u5df2\u9009 {n} \u5f20",
         "smuggle_secret": "\u8d70\u79c1\uff1a\u4fdd\u5bc6x{n}\u5f20",
@@ -468,6 +474,12 @@ UI = {
         "contracts_chip": "{t} {n}/{m}",
         "update_changelog": "v{v} \u66f4\u65b0\u8be6\u60c5\uff1a",
         "update_scroll_hint": "\u6eda\u8f6e\u53ef\u6eda\u52a8\u66f4\u65b0\u8bf4\u660e",
+        "menu_whatsnew": "最新更新",
+        "menu_news_none": "检查更新后，最新版本内容会显示在这里。",
+        "menu_news_checking": "正在检查更新...",
+        "menu_news_uptodate": "v{v} 已是最新版本。",
+        "menu_news_hint": "滚动查看更多",
+        "list_scroll_hint": "滚动查看更多内容",
         "over_pot": "\u8d4f\u91d1\u6c60",
     },
 }
