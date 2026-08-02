@@ -1372,7 +1372,7 @@ class App:
             self.done = True
         else:
             self.update_state = "error"
-            self.update_error = self._t("update_src_only")
+            self.update_error = self._t("update_apply_failed")
             self._rebuild_update_ui()
 
     def _rebuild_update_ui(self):

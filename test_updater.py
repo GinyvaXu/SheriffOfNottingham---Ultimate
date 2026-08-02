@@ -182,6 +182,11 @@ class DownloadTest(unittest.TestCase):
         self.assertEqual(calls["n"], 2)
 
 
+class _FakeProc:
+    def __init__(self, pid=12345):
+        self.pid = pid
+
+
 class ApplyTest(unittest.TestCase):
     def setUp(self):
         self._flag = updater._pending_flag()
@@ -194,7 +199,8 @@ class ApplyTest(unittest.TestCase):
 
     def test_apply_update_writes_bat(self):
         exe = r"C:\Games\SheriffOfNottingham.exe"
-        with mock.patch.object(updater, "_launch_bat", return_value=True) as launch:
+        with mock.patch.object(updater, "_launch_bat",
+                               return_value=_FakeProc()) as launch:
             with tempfile.TemporaryDirectory() as d:
                 inst = os.path.join(d, "Setup.exe")
                 with open(inst, "wb") as f:
@@ -205,17 +211,22 @@ class ApplyTest(unittest.TestCase):
                 with open(bat, encoding="ascii", errors="replace") as f:
                     content = f.read()
                 self.assertIn("VERYSILENT", content)
+                self.assertIn("update.log", content)
                 self.assertIn("%~1", content)  # exe is passed as %1 arg
                 launch.assert_called_once()
                 args = launch.call_args[0]
                 # args = (bat, [exe, installer, flag])
                 self.assertEqual(args[1][0], exe)
                 self.assertEqual(args[1][1], inst)
+                # flag now records the batch pid so stale flags can be told apart
+                with open(updater._pending_flag(), encoding="ascii") as f:
+                    flag_text = f.read()
+                self.assertIn("pid=12345", flag_text)
 
     def test_apply_update_bat_has_single_crlf(self):
         """Regression: bat must use \r\n, not \r\r\n (text-mode newline doubling)."""
         exe = r"C:\Games\SheriffOfNottingham.exe"
-        with mock.patch.object(updater, "_launch_bat", return_value=True):
+        with mock.patch.object(updater, "_launch_bat", return_value=_FakeProc()):
             with tempfile.TemporaryDirectory() as d:
                 inst = os.path.join(d, "Setup.exe")
                 with open(inst, "wb") as f:
@@ -229,17 +240,38 @@ class ApplyTest(unittest.TestCase):
         self.assertEqual(raw.count(b"\r\n"), raw.count(b"\n"))
 
     def test_apply_update_guard_flag(self):
-        """A second apply_update while one is pending must not double-schedule."""
+        """A second apply_update while a batch is running must not re-schedule."""
         exe = r"C:\Games\SheriffOfNottingham.exe"
-        with mock.patch.object(updater, "_launch_bat", return_value=True) as launch:
-            with tempfile.TemporaryDirectory() as d:
-                inst = os.path.join(d, "Setup.exe")
-                with open(inst, "wb") as f:
-                    f.write(b"x")
-                self.assertTrue(updater.apply_update(inst, exe_path=exe))
-                self.assertTrue(os.path.exists(updater._pending_flag()))
-                self.assertTrue(updater.apply_update(inst, exe_path=exe))
-                launch.assert_called_once()
+        with mock.patch.object(updater, "_launch_bat",
+                               return_value=_FakeProc()) as launch:
+            with mock.patch.object(updater, "_pid_alive", return_value=True):
+                with tempfile.TemporaryDirectory() as d:
+                    inst = os.path.join(d, "Setup.exe")
+                    with open(inst, "wb") as f:
+                        f.write(b"x")
+                    self.assertTrue(updater.apply_update(inst, exe_path=exe))
+                    self.assertTrue(os.path.exists(updater._pending_flag()))
+                    self.assertTrue(updater.apply_update(inst, exe_path=exe))
+                    launch.assert_called_once()
+
+    def test_apply_update_clears_stale_flag(self):
+        """A leftover flag whose batch is gone must be cleared and re-scheduled."""
+        exe = r"C:\Games\SheriffOfNottingham.exe"
+        with mock.patch.object(updater, "_launch_bat",
+                               return_value=_FakeProc()) as launch:
+            with mock.patch.object(updater, "_pid_alive", return_value=False):
+                with tempfile.TemporaryDirectory() as d:
+                    inst = os.path.join(d, "Setup.exe")
+                    with open(inst, "wb") as f:
+                        f.write(b"x")
+                    # old-format flag from a previously interrupted update
+                    with open(updater._pending_flag(), "w",
+                              encoding="ascii") as f:
+                        f.write("1")
+                    self.assertTrue(updater.apply_update(inst, exe_path=exe))
+                    launch.assert_called_once()
+                    with open(updater._pending_flag(), encoding="ascii") as f:
+                        self.assertIn("pid=", f.read())
 
     def test_apply_update_no_exe(self):
         with mock.patch.object(updater, "_exe_path", return_value=None):

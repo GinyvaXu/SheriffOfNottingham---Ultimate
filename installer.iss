@@ -1,8 +1,8 @@
-; Sheriff of Nottingham - Inno Setup installer script (v1.5.0)
+; Sheriff of Nottingham - Inno Setup installer script (v1.5.1)
 ; Compile: "C:\Users\zhenl\InnoSetup6\ISCC.exe" installer.iss
 
 #define MyAppName "Sheriff of Nottingham"
-#define MyAppVersion "1.5.0"
+#define MyAppVersion "1.5.1"
 #define MyAppPublisher "Sheriff Project"
 #define MyAppExeName "SheriffOfNottingham.exe"
 
@@ -13,7 +13,8 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 SetupIconFile=assets\icon.ico
-DefaultDirName={autopf}\SheriffOfNottingham
+; per-user install: silent auto-updates never need an elevation prompt
+DefaultDirName={localappdata}\SheriffOfNottingham
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest

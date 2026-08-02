@@ -31,6 +31,7 @@ import ssl
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 
@@ -207,20 +208,78 @@ def _exe_path():
 
 
 def _launch_bat(bat_path, args=None):
-    """Launch a .bat hidden and detached, so it survives this process."""
+    """Launch a .bat hidden and detached, so it survives this process.
+
+    Returns the Popen handle (for pid tracking) or None when the batch
+    could not be started at all.
+    """
     flags = 0x08000000  # CREATE_NO_WINDOW
     flags |= getattr(subprocess, "DETACHED_PROCESS", 0)
     flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    subprocess.Popen(["cmd.exe", "/c", bat_path] + list(args or []),
-                     creationflags=flags, close_fds=True, shell=False)
-    return True
+    try:
+        return subprocess.Popen(["cmd.exe", "/c", bat_path] + list(args or []),
+                                creationflags=flags, close_fds=True, shell=False)
+    except Exception:  # noqa: BLE001 - caller falls back to a manual update
+        return None
 
 
 _PENDING_FLAG = "update_pending.flag"
+_FLAG_MAX_AGE = 600.0  # seconds; a hung batch older than this is considered stale
 
 
 def _pending_flag():
     return os.path.join(download_dir(), _PENDING_FLAG)
+
+
+def _pid_alive(pid):
+    """Best-effort Windows check whether a process id is still running."""
+    if not pid:
+        return False
+    try:
+        import ctypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        h = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not h:
+            return False
+        ctypes.windll.kernel32.CloseHandle(h)
+        return True
+    except Exception:  # noqa: BLE001 - treat unknown as not alive
+        return False
+
+
+def _pending_flag_state():
+    """Return (pid, age_seconds) described by the pending flag.
+
+    Returns (None, 0.0) when there is no flag file at all.  An unreadable
+    or older-format flag (plain "1") yields (None, -1.0), which the caller
+    treats as stale so the update can be re-scheduled.
+    """
+    flag = _pending_flag()
+    if not os.path.exists(flag):
+        return None, 0.0
+    pid, ts = None, 0.0
+    try:
+        with io.open(flag, "r", encoding="ascii", errors="ignore") as f:
+            for ln in f:
+                if "=" not in ln:
+                    continue
+                k, v = ln.strip().split("=", 1)
+                if k == "pid":
+                    pid = int(v) or None
+                elif k == "ts":
+                    ts = float(v) or 0.0
+    except Exception:  # noqa: BLE001
+        return None, -1.0
+    age = time.time() - ts if ts else -1.0
+    return pid, age
+
+
+def _flag_is_stale(pid, age):
+    """True when the pending batch is no longer actually running."""
+    if pid and _pid_alive(pid):
+        return age > _FLAG_MAX_AGE  # batch hung for a long time
+    return True  # no live batch process behind the flag -> stale
 
 
 def apply_update(installer_path, exe_path=None):
@@ -239,11 +298,19 @@ def apply_update(installer_path, exe_path=None):
         return False
     installer_path = os.path.abspath(installer_path)
     flag = _pending_flag()
-    if os.path.exists(flag):
-        return True  # another install is already running
+    # A leftover flag (crashed / killed / blocked batch) would otherwise make
+    # every later click silently "succeed" without installing anything.
+    pid, age = _pending_flag_state()
+    if pid is not None and not _flag_is_stale(pid, age):
+        return True  # a batch is genuinely still running
+    if pid is not None:
+        try:
+            os.remove(flag)
+        except OSError:
+            pass
     bat = os.path.join(download_dir(), "run_update.bat")
     with io.open(flag, "w", encoding="ascii") as f:
-        f.write("1")
+        f.write("pid=0\nts=%d\n" % int(time.time()))
     # %1 = game exe, %2 = installer, %3 = pending flag
     lines = [
         "@echo off",
@@ -251,6 +318,9 @@ def apply_update(installer_path, exe_path=None):
         'set "EXE=%~1"',
         'set "INST=%~2"',
         'set "FLAG=%~3"',
+        'set "LOG=%~dp0update.log"',
+        'set "INNO=%~dp0inno_install.log"',
+        'echo [%date% %time%] batch started >> "%LOG%"',
         # wait until the old game process fully exits (a PyInstaller onefile
         # process keeps its own exe open while running, so the installer
         # cannot replace it until the process is gone)
@@ -259,17 +329,24 @@ def apply_update(installer_path, exe_path=None):
         'tasklist /FI "IMAGENAME eq %~n1.exe" 2>nul | find /I "%~n1.exe" >nul',
         "if errorlevel 1 goto exit_done",
         "set /a n+=1",
-        "if !n! lss 40 ( ping -n 2 127.0.0.1 >nul & goto wait_exit )",
+        "if !n! lss 20 ( ping -n 2 127.0.0.1 >nul & goto wait_exit )",
         # give up waiting: force-kill so the installer can replace the exe
+        'echo [%date% %time%] game did not exit, forcing kill >> "%LOG%"',
         'taskkill /IM "%~n1.exe" /F >nul 2>&1',
+        "ping -n 2 127.0.0.1 >nul",
         ":exit_done",
         # silent install, retry while the exe is still locked
         "set /a n=0",
         ":install",
-        '"%INST%" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART',
-        "if errorlevel 1 (",
+        'echo [%date% %time%] running installer >> "%LOG%"',
+        '"%INST%" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="%INNO%"',
+        "set ec=!errorlevel!",
+        'echo [%date% %time%] installer exit code=!ec! >> "%LOG%"',
+        "if !ec! neq 0 (",
         "  set /a n+=1",
         "  if !n! lss 3 ( ping -n 3 127.0.0.1 >nul & goto install )",
+        '  echo [%date% %time%] install failed after retries, opening releases page >> "%LOG%"',
+        '  start "" "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases"',
         ")",
         # launch the new game; if it dies within a few seconds (e.g. a
         # boot-time temp-extraction race) retry a couple of times
@@ -281,20 +358,26 @@ def apply_update(installer_path, exe_path=None):
         "if errorlevel 1 (",
         "  set /a n+=1",
         "  if !n! lss 3 ( ping -n 2 127.0.0.1 >nul & goto launch )",
+        '  echo [%date% %time%] could not relaunch game >> "%LOG%"',
         ")",
+        'echo [%date% %time%] batch finished >> "%LOG%"',
         'del "%INST%" >nul 2>&1',
         'del "%FLAG%" >nul 2>&1',
         "(goto) 2>nul & del \"%~f0\"",
     ]
     with io.open(bat, "w", encoding="ascii", errors="replace", newline="") as f:
         f.write("\r\n".join(lines) + "\r\n")
-    ok = _launch_bat(bat, [exe_path, installer_path, flag])
-    if not ok:
+    proc = _launch_bat(bat, [exe_path, installer_path, flag])
+    if proc is None:
         try:
             os.remove(flag)
         except OSError:
             pass
         return False
+    # Record the batch pid so a later click can tell a running batch apart
+    # from a stale flag left behind by a killed/interrupted one.
+    with io.open(flag, "w", encoding="ascii") as f:
+        f.write("pid=%d\nts=%d\n" % (proc.pid, int(time.time())))
     return True
 
 

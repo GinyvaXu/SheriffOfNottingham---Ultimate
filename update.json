@@ -1,5 +1,5 @@
 {
-  "version": "1.5.0",
-  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.5.0/SheriffOfNottingham-Setup-1.5.0.exe",
-  "notes": "v1.5.0 - GUI polish + 6 new rule mods\nGUI: Home screen redesigned into grouped panels (Game Setup / Avatars / Tools); lobby split into Players / Rule Mods / Host Settings; cleaner cards, buttons and market layouts. Update check page now shows the full changelog of the new version.\nNew rule mods (in-game Mods page, host-enforced): Bribe Economics, Night Market Timer, Trade Caravans, Guild Contracts, Royal Favor, Merchant Reputation.\nMod compatibility: conflicting rule mods are blocked at game start with a clear warning.\nBots: 4 personalities (Paranoid / Greedy / Honest / Reckless) so same-difficulty bots are distinguishable."
+  "version": "1.5.1",
+  "url": "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases/download/v1.5.1/SheriffOfNottingham-Setup-1.5.1.exe",
+  "notes": "v1.5.1 - Fixed: \"Update & Restart\" did nothing (from v1.4)\nFix: an interrupted update used to leave a pending flag in %TEMP%\\SheriffUpdate; after that every click silently \"succeeded\" without installing. The flag now records the batch process id and is auto-cleared when stale, so updates always re-run.\nFix: the background update script now writes update.log / inno_install.log and, if the silent install still fails, opens the GitHub releases page as a fallback.\nImprovement: the installer now defaults to a per-user folder, so silent auto-updates never need an admin elevation prompt.\nGUI: home screen grouped panels, lobby sections, update changelog panel, 6 new rule mods + mod compatibility checks, bot personalities (from v1.5.0)."
 }
