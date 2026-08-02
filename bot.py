@@ -12,9 +12,10 @@ import game
 LEVELS = ("easy", "normal", "hard")
 
 
-def bot_name(level):
-    """Wire name for a bot seat."""
-    return "Bot-" + level.capitalize()
+def bot_name(level, num=None):
+    """Wire name for a bot seat (num differentiates same-level bots)."""
+    base = "Bot-" + level.capitalize()
+    return base if num is None else f"{base} {num}"
 
 
 def _public_smuggle(p):

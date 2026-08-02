@@ -241,11 +241,33 @@ class GameServer:
                 elif t == "remove_bot" and seat == 0:
                     self._remove_bot(msg.get("seat"))
                 return
+            if t == "back_to_lobby":
+                self._back_to_lobby()
+                return
             if t == "host_quit":
                 self._broadcast({"t": "server_closed", "msg": "Host closed the room"})
                 self.stop()
                 return
             self._handle_game_action(seat, t, msg)
+
+    def _back_to_lobby(self):
+        """After a finished game, return everyone to the lobby of the same room."""
+        with self.lock:
+            if self.game is None or self.game.phase != "GAME_OVER":
+                return
+            self.game = None
+            self.started = False
+            self._discarded = {}
+            self._seen_round = 0
+            self.bot_levels = {}
+            for i, s in enumerate(self.seats):
+                if s is None:
+                    continue
+                s["game_seat"] = None
+                # drop human ghosts who never reconnected; bots stay in the room
+                if not s.get("bot") and s["conn"] is None:
+                    self.seats[i] = None
+        self._broadcast_lobby()
 
     def _start_game(self, joined, rounds=None):
         players = [game.Player(self.seats[i]["name"]) for i in joined]
@@ -347,7 +369,8 @@ class GameServer:
         seat = next((i for i, s in enumerate(self.seats) if s is None), None)
         if seat is None:
             return
-        self.seats[seat] = {"name": bot.bot_name(level), "conn": None, "reader": None,
+        n = sum(1 for s in self.seats if s and s.get("bot") == level)
+        self.seats[seat] = {"name": bot.bot_name(level, n + 1), "conn": None, "reader": None,
                             "seat": seat, "game_seat": None, "bot": level}
         self._broadcast_lobby()
 

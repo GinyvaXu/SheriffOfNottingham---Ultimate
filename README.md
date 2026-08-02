@@ -140,6 +140,14 @@ with Inno Setup:
 - **Inspect**: the bag owner may bribe (gold + note); the sheriff decides pass or inspect.
 - **Chat**: bottom-right input, Enter to send; quick-chat buttons are also available.
 
+## Game over / back to lobby
+
+- After the game ends (results screen) click **Back to Room** to return everyone
+  to the lobby of the same room (seats and bots are kept, the host can start a
+  new game). The room can also be quit with the Quit button.
+- Bots of the same difficulty get numbered names (Bot-Easy 1, Bot-Easy 2, ...)
+  so multiple bots of one level are easy to tell apart.
+
 ## Disconnect / reconnect
 
 If a player drops mid-game the game waits for them (no AI takeover, no forfeit).

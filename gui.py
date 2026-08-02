@@ -704,8 +704,16 @@ class App:
         self._send({"t": "inspect_decision", "action": action})
 
     def _rebuild_over_ui(self):
-        self.buttons = [Button((W // 2 - 100, 660, 200, 46), self._t("btn_close"),
-                               lambda: setattr(self, "done", True))]
+        if self.closed:
+            self.buttons = [Button((W // 2 - 100, 660, 200, 46), self._t("btn_close"),
+                                   lambda: setattr(self, "done", True))]
+        else:
+            self.buttons = [
+                Button((W // 2 - 210, 660, 200, 46), self._t("btn_back_room"),
+                       lambda: self._send({"t": "back_to_lobby"})),
+                Button((W // 2 + 10, 660, 200, 46), self._t("btn_quit"),
+                       lambda: setattr(self, "done", True)),
+            ]
 
     # ---------- Drawing ----------
 
