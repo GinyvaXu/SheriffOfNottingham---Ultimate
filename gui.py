@@ -3,6 +3,7 @@
 
 import os
 import sys
+import threading
 import time
 
 import pygame
@@ -12,6 +13,8 @@ import gfx
 import lang
 import mods
 import net
+import updater
+import version
 
 W, H = 1280, 800
 COLOR_BG = (42, 36, 30)
@@ -249,6 +252,15 @@ class App:
         self.mod_errors = list(mod_errors or [])
         self.mod_list = list(mod_list or [])
         self.mods_toast = ""
+        self.update_state = "idle"
+        self.update_info = None
+        self.update_error = ""
+        self.update_progress = 0.0
+        self.update_installer = ""
+        self.update_banner = ""
+        self._update_ui_dirty = False
+        if updater.is_frozen():
+            self._start_update_check()
         for err in self.mod_errors:
             self._append_chat(self._t("mods_error", s=err), COLOR_RED)
         if self.mod_names:
@@ -331,6 +343,8 @@ class App:
             self._rebuild_menu_ui()
         elif self.screen_name == "mods":
             self._rebuild_mods_ui()
+        elif self.screen_name == "update":
+            self._rebuild_update_ui()
         elif self.screen_name == "lobby":
             self._rebuild_lobby_ui()
         elif self.screen_name == "game":
@@ -394,6 +408,9 @@ class App:
             for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "mods":
+            for b in self.buttons:
+                b.handle(ev)
+        elif self.screen_name == "update":
             for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "game":
@@ -493,6 +510,7 @@ class App:
             Button((470, 380, 150, 44), self._t("btn_join"), self._join_room),
             Button((640, 380, 100, 44), self._t("btn_quit"), lambda: setattr(self, "done", True)),
             Button((300, 440, 150, 44), self._t("btn_mods"), self._open_mods),
+            Button((470, 440, 150, 44), self._t("btn_update"), self._open_update),
             Button((610, 300, 90, 36), self._t("btn_paste"), self._paste_join),
             Button((W - 170, 20, 140, 40), self._t("btn_lang"), self._toggle_lang),
         ]
@@ -800,6 +818,145 @@ class App:
         for b in self.buttons:
             b.draw(self.screen)
 
+    # ---------- Update ----------
+
+    def _open_update(self):
+        self.screen_name = "update"
+        self._rebuild_update_ui()
+        if self.update_state in ("idle",):
+            self._start_update_check()
+
+    def _check_update_click(self):
+        self._start_update_check()
+        self._rebuild_update_ui()
+
+    def _start_update_check(self):
+        if self.update_state in ("checking", "downloading", "installing"):
+            return
+        self.update_state = "checking"
+        self.update_error = ""
+        self.update_banner = ""
+        self._update_ui_dirty = True
+        threading.Thread(target=self._thread_check, daemon=True).start()
+
+    def _thread_check(self):
+        info = updater.check_for_update()
+        self.update_info = info
+        if info.get("error"):
+            self.update_state = "error"
+            self.update_error = info["error"]
+        elif info.get("available"):
+            self.update_state = "available"
+            self.update_banner = self._t("update_banner", ver=info["version"])
+        else:
+            self.update_state = "uptodate"
+        self._update_ui_dirty = True
+
+    def _start_download(self):
+        if self.update_state not in ("available", "downloaded"):
+            return
+        info = self.update_info or {}
+        url = info.get("url", "")
+        if not url:
+            self.update_state = "error"
+            self.update_error = self._t("update_no_url")
+            self._rebuild_update_ui()
+            return
+        self.update_state = "downloading"
+        self.update_progress = 0.0
+        self.update_error = ""
+        self._rebuild_update_ui()
+        threading.Thread(target=self._thread_download, args=(url,), daemon=True).start()
+
+    def _thread_download(self, url):
+        def progress(got, total):
+            if total:
+                self.update_progress = 100.0 * got / total
+            self._update_ui_dirty = True
+        try:
+            self.update_installer = updater.download_installer(url, progress=progress)
+            self.update_state = "downloaded"
+        except Exception as e:  # noqa: BLE001
+            self.update_state = "error"
+            self.update_error = str(e)
+        self._update_ui_dirty = True
+
+    def _install_update(self):
+        if self.update_state != "downloaded" or not self.update_installer:
+            return
+        if updater.apply_update(self.update_installer):
+            self.update_state = "installing"
+            self._append_chat(self._t("update_installing"), COLOR_GREEN)
+            self.done = True
+        else:
+            self.update_state = "error"
+            self.update_error = self._t("update_src_only")
+            self._rebuild_update_ui()
+
+    def _rebuild_update_ui(self):
+        self.buttons = []
+        st = self.update_state
+        if st in ("idle", "uptodate", "error"):
+            self.buttons.append(Button((60, 700, 180, 44), self._t("update_check"),
+                                       self._check_update_click))
+        elif st == "available":
+            self.buttons.append(Button((60, 700, 220, 44), self._t("update_download"),
+                                       self._start_download))
+        elif st == "downloaded":
+            self.buttons.append(Button((60, 700, 220, 44), self._t("update_install"),
+                                       self._install_update))
+        self.buttons.append(Button((300, 700, 240, 44), self._t("update_open_page"),
+                                   updater.open_release_page))
+        self.buttons.append(Button((W - 180, 700, 150, 44), self._t("btn_back"),
+                                   self._back_to_menu))
+
+    def _draw_update(self):
+        title = get_font(36).render(self._t("update_title"), True, COLOR_ACCENT)
+        self.screen.blit(title, title.get_rect(center=(W // 2, 60)))
+        cur = self._t("update_current", v=version.__version__)
+        t = get_font(18).render(cur, True, COLOR_TEXT)
+        self.screen.blit(t, (W // 2 - 300, 120))
+        st = self.update_state
+        info = self.update_info or {}
+        cx = W // 2 - 300
+        if st == "checking":
+            t = get_font(24).render(self._t("update_checking"), True, COLOR_DIM)
+            self.screen.blit(t, (cx, 180))
+        elif st == "uptodate":
+            t = get_font(24).render(self._t("update_uptodate", v=info.get("current", version.__version__)),
+                                    True, COLOR_GREEN)
+            self.screen.blit(t, (cx, 180))
+        elif st == "available":
+            t = get_font(24).render(self._t("update_available", v=info.get("version", "")),
+                                    True, COLOR_ACCENT)
+            self.screen.blit(t, (cx, 180))
+        elif st == "downloading":
+            pct = max(0, min(100, int(self.update_progress)))
+            t = get_font(24).render(self._t("update_downloading", p=pct), True, COLOR_ACCENT)
+            self.screen.blit(t, (cx, 180))
+            pygame.draw.rect(self.screen, COLOR_PANEL, (cx, 230, 600, 24), border_radius=6)
+            if pct > 0:
+                pygame.draw.rect(self.screen, COLOR_GOLD, (cx, 230, max(6, int(600 * pct / 100)), 24),
+                                 border_radius=6)
+        elif st == "downloaded":
+            t = get_font(24).render(self._t("update_downloaded"), True, COLOR_GREEN)
+            self.screen.blit(t, (cx, 180))
+        elif st == "installing":
+            t = get_font(24).render(self._t("update_installing"), True, COLOR_GREEN)
+            self.screen.blit(t, (cx, 180))
+        elif st == "error":
+            t = get_font(22).render(self._t("update_error", e=self.update_error), True, COLOR_RED)
+            self.screen.blit(t, (cx, 180))
+        if not updater.is_frozen():
+            t = get_font(16).render(self._t("update_src_hint"), True, COLOR_DIM)
+            self.screen.blit(t, (cx, 264))
+        notes = (info or {}).get("notes", "")
+        if notes and st in ("available", "downloaded", "installing"):
+            self._draw_block(self.screen, self._t("update_notes") + notes, cx, 320,
+                             get_font(17), COLOR_DIM, 620)
+        for b in self.buttons:
+            b.draw(self.screen)
+
     # ---------- Drawing ----------
 
     def draw(self):
@@ -808,6 +965,8 @@ class App:
             self._draw_menu()
         elif self.screen_name == "mods":
             self._draw_mods()
+        elif self.screen_name == "update":
+            self._draw_update()
         elif self.screen_name == "lobby":
             self._draw_lobby()
         elif self.screen_name == "game":
@@ -830,6 +989,9 @@ class App:
             t = get_font(15).render(self._t("mods_error", s="; ".join(self.mod_errors)),
                                     True, COLOR_RED)
             self.screen.blit(t, t.get_rect(center=(W // 2, 200)))
+        if self.update_banner:
+            t = get_font(16).render(self.update_banner, True, COLOR_GREEN)
+            self.screen.blit(t, t.get_rect(center=(W // 2, 224)))
         for lbl, inp in [(self._t("lbl_name"), self.name_input),
                          (self._t("lbl_players"), self.players_input),
                          (self._t("lbl_join"), self.join_input)]:
