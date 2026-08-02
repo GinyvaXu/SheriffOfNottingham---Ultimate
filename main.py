@@ -28,6 +28,12 @@ def main():
         _show_version()
         return
 
+    # Tell the auto-update batch that the bootloader + Python + pygame all
+    # loaded successfully. The batch watches for this marker and retries the
+    # launch when it never appears (e.g. the onefile Python-DLL boot failure).
+    import updater
+    updater.mark_boot_ok()
+
     loaded_mods, mod_errors = mods.load_mods()
 
     ap = argparse.ArgumentParser(description="Sheriff of Nottingham - Lite Online")

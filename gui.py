@@ -105,6 +105,37 @@ def get_font(size):
     return f
 
 
+_TEXT_OUTLINE = (24, 18, 12)   # dark outline behind bright card/goods text
+
+
+def render_outlined(font, text, color, outline=_TEXT_OUTLINE, width=2):
+    """Render text with a dark outline so bright card colors stay readable.
+
+    Returns a surface 2*width px larger on every side; center-blits keep the
+    text centered automatically.
+    """
+    base = font.render(text, True, color)
+    w = max(1, int(width))
+    out = font.render(text, True, outline)
+    s = pygame.Surface((base.get_width() + 2 * w, base.get_height() + 2 * w),
+                       pygame.SRCALPHA)
+    for dx in (-w, 0, w):
+        for dy in (-w, 0, w):
+            if dx or dy:
+                s.blit(out, (w + dx, w + dy))
+    s.blit(base, (w, w))
+    return s
+
+
+def _out_blit(surf, font, text, color, pos, outline=_TEXT_OUTLINE, width=2):
+    """Blit outlined text so its visual top-left lands at ``pos`` and return
+    the visual advance (the plain-text width, without outline padding)."""
+    s = render_outlined(font, text, color, outline, width)
+    w = int(width)
+    surf.blit(s, (pos[0] - w, pos[1] - w))
+    return s.get_width() - 2 * w
+
+
 class Button:
     def __init__(self, rect, text, cb=None, enabled=True, highlight=False,
                  bg=None, border=None, value=None, sub=None, icon=None):
@@ -150,13 +181,13 @@ class Button:
         txt = COLOR_TEXT if self.enabled else COLOR_DIM
         cy = self.rect.centery
         if self.value is not None:
-            t = get_font(26).render(str(self.value), True, txt)
+            t = render_outlined(get_font(26), str(self.value), txt)
             surf.blit(t, t.get_rect(center=(self.rect.centerx, self.rect.y + 32)))
             cy += 16
-        t = get_font(17).render(self.text, True, txt)
+        t = render_outlined(get_font(17), self.text, txt)
         surf.blit(t, t.get_rect(center=(self.rect.centerx, cy)))
         if self.sub:
-            t = get_font(13).render(self.sub, True, COLOR_DIM)
+            t = render_outlined(get_font(13), self.sub, COLOR_DIM)
             surf.blit(t, t.get_rect(center=(self.rect.centerx, self.rect.bottom - 12)))
         if self.icon is not None:
             ic = self.icon
@@ -273,6 +304,8 @@ class App:
         self.chat_scroll = 0
         self.chat_max_scroll = 0
         self.chat_drag = False
+        self.chat_thumb = None
+        self.chat_drag_offset = 0
         self.ready = False
         self.mods_row_buttons = []
         self.market_row_buttons = []
@@ -528,17 +561,34 @@ class App:
                 self.chat_scroll = max(0, int(self.chat_scroll) + int(ev.y))
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                 body = pygame.Rect(890, 96, 372, 622)
-                bar = pygame.Rect(body.right - 10, body.y, 8, body.height)
+                bar = pygame.Rect(body.right - 18, body.y, 18, body.height)
                 if bar.collidepoint(ev.pos) and self.chat_max_scroll > 0:
-                    self.chat_drag = True
+                    thumb = self.chat_thumb
+                    if thumb is not None and thumb.inflate(8, 0).collidepoint(ev.pos):
+                        # grab the handle and drag it
+                        self.chat_drag = True
+                        self.chat_drag_offset = ev.pos[1] - thumb.y
+                    else:
+                        # click on the track: page toward the click
+                        target = (thumb.y if thumb is not None
+                                  else body.y + body.height // 2)
+                        if ev.pos[1] < target:
+                            self.chat_scroll = max(0, self.chat_scroll - 8)
+                        else:
+                            self.chat_scroll = min(self.chat_max_scroll,
+                                                   self.chat_scroll + 8)
+            elif ev.type == pygame.MOUSEMOTION and self.chat_drag:
+                body = pygame.Rect(890, 96, 372, 622)
+                thumb = self.chat_thumb
+                if thumb is not None and thumb.height > 0:
+                    new_y = ev.pos[1] - self.chat_drag_offset
+                    frac = (new_y - body.y) / max(1, body.height - thumb.height)
+                    self.chat_scroll = min(self.chat_max_scroll,
+                                           max(0, int(frac * (self.chat_max_scroll + 1))))
+                else:
                     frac = (ev.pos[1] - body.y) / max(1, body.height)
                     self.chat_scroll = min(self.chat_max_scroll,
                                            max(0, int(frac * (self.chat_max_scroll + 1))))
-            elif ev.type == pygame.MOUSEMOTION and self.chat_drag:
-                body = pygame.Rect(890, 96, 372, 622)
-                frac = (ev.pos[1] - body.y) / max(1, body.height)
-                self.chat_scroll = min(self.chat_max_scroll,
-                                       max(0, int(frac * (self.chat_max_scroll + 1))))
             elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
                 self.chat_drag = False
         elif self.screen_name == "over":
@@ -922,7 +972,15 @@ class App:
         msgs = []
         for info in to_install:
             ok, msg = market.install_mod(info)
-            if not ok:
+            if ok:
+                # one-click install also enables the mod: restart is still
+                # required, but the player no longer has to find it in the
+                # Mods screen and toggle it on manually.
+                mid = str(info.get("id") or info.get("folder") or "")
+                if mid and not mods.set_enabled(mid, True):
+                    ok_all = False
+                    msgs.append(mid + ": " + self._t("market_enable_failed"))
+            else:
                 ok_all = False
                 msgs.append(msg)
         if ok_all:
@@ -1331,6 +1389,11 @@ class App:
 
     def _thread_market_install(self, info):
         ok, msg = market.install_mod(info)
+        if ok:
+            # installing from the market also enables the mod directly.
+            mid = str(info.get("id") or info.get("folder") or "")
+            if mid and not mods.set_enabled(mid, True):
+                ok, msg = False, self._t("market_enable_failed")
         self.market_state = "ready"
         self.market_installing_id = ""
         if ok:
@@ -1762,14 +1825,24 @@ class App:
             t = get_font(15).render(self._t("rmods_none"), True, COLOR_DIM)
             self.screen.blit(t, (610, 140))
         else:
-            total_h = len(rmods) * 42
+            # Full detail rows: name/version/category line + up to 3 wrapped
+            # description lines, so the detailed rules are actually readable.
+            f13 = get_font(13)
+            rows = []
+            for m in rmods:
+                desc = ((m.get("description_zh") or m.get("description") or "")
+                        if self.lang == "zh" else (m.get("description") or ""))
+                dlines = self._wrap_text(desc, f13, area.width - 16) if desc else []
+                rows.append((m, dlines[:3]))
+            heights = [44 + 17 * max(1, len(dl)) for m, dl in rows]
+            total_h = sum(heights)
             max_scroll = max(0, total_h - area.height + 4)
             self.lobby_mods_scroll = min(self.lobby_mods_scroll, max_scroll)
             self.screen.set_clip(area)
-            yy = 136 - self.lobby_mods_scroll
-            for m in rmods:
-                if yy + 40 < area.top or yy > area.bottom:
-                    yy += 42
+            yy = 134 - self.lobby_mods_scroll
+            for (m, dlines), row_h in zip(rows, heights):
+                if yy + row_h - 4 < area.top or yy > area.bottom:
+                    yy += row_h
                     continue
                 nm = ((m.get("name_zh") or m.get("name") or m.get("id"))
                       if self.lang == "zh" else (m.get("name") or m.get("id")))
@@ -1777,14 +1850,14 @@ class App:
                 t = get_font(16).render("- {0}  v{1}  {2}".format(nm, m.get("version", "?"), cat),
                                         True, COLOR_TEXT)
                 self.screen.blit(t, (610, yy))
-                desc = ((m.get("description_zh") or m.get("description") or "")
-                        if self.lang == "zh" else (m.get("description") or ""))
-                if desc:
-                    dlines = self._wrap_text(desc, get_font(13), area.width - 16)
-                    d = get_font(13).render(dlines[0], True, COLOR_DIM)
-                    self.screen.blit(d, (626, yy + 21))
-                pygame.draw.line(self.screen, (50, 42, 34), (610, yy + 40), (1170, yy + 40))
-                yy += 42
+                dy = yy + 24
+                for dl in dlines:
+                    d = f13.render(dl, True, COLOR_DIM)
+                    self.screen.blit(d, (626, dy))
+                    dy += 17
+                pygame.draw.line(self.screen, (50, 42, 34), (610, yy + row_h - 6),
+                                 (1170, yy + row_h - 6))
+                yy += row_h
             self.screen.set_clip(None)
             if max_scroll > 0:
                 hint = get_font(13).render(self._t("list_scroll_hint"), True, COLOR_DIM)
@@ -1828,13 +1901,12 @@ class App:
         prefix = get_font(15).render(self._t("stall"), True, COLOR_DIM)
         surf.blit(prefix, (px, y))
         px += prefix.get_width()
+        f15 = get_font(15)
         for k, n in (legal_counts or {}).items():
-            t = get_font(15).render(f"{self._tn(k)}x{n} ", True, TYPE_COLOR.get(k, COLOR_TEXT))
-            surf.blit(t, (px, y))
-            px += t.get_width()
+            px += _out_blit(surf, f15, f"{self._tn(k)}x{n} ",
+                            TYPE_COLOR.get(k, COLOR_TEXT), (px, y))
         if contra_text:
-            t = get_font(15).render(contra_text, True, COLOR_CONTRA_TEXT)
-            surf.blit(t, (px, y))
+            px += _out_blit(surf, f15, contra_text, COLOR_CONTRA_TEXT, (px, y))
 
     def _draw_stall_colored(self, x, y, w, p):
         """Stall row in the player panel: every goods type uses its own color
@@ -1845,25 +1917,24 @@ class App:
         self.screen.blit(prefix, (px, y))
         px += prefix.get_width()
         for k, cnt in (p.get("stand_legal") or {}).items():
-            part = font.render(f"{self._tn(k)}x{cnt} ",
-                               True, TYPE_COLOR.get(k, COLOR_TEXT))
-            if px + part.get_width() > x + w:
+            part_w = font.render(f"{self._tn(k)}x{cnt} ", True,
+                                 TYPE_COLOR.get(k, COLOR_TEXT)).get_width()
+            if px + part_w > x + w:
                 y += 18
                 px = x
-            self.screen.blit(part, (px, y))
-            px += part.get_width()
+            px += _out_blit(self.screen, font, f"{self._tn(k)}x{cnt} ",
+                            TYPE_COLOR.get(k, COLOR_TEXT), (px, y))
         for rt in (p.get("stand_royal") or []):
             rd = game.ROYAL_GOODS.get(rt)
             if not rd:
                 continue
             base = TYPE_COLOR.get(rd["of"], COLOR_TEXT)
-            part = font.render(f"{self._tn(rt)}(={rd['equals']}{self._tn(rd['of'])}) ",
-                               True, base)
-            if px + part.get_width() > x + w:
+            part_txt = f"{self._tn(rt)}(={rd['equals']}{self._tn(rd['of'])}) "
+            part_w = font.render(part_txt, True, base).get_width()
+            if px + part_w > x + w:
                 y += 18
                 px = x
-            self.screen.blit(part, (px, y))
-            px += part.get_width()
+            px += _out_blit(self.screen, font, part_txt, base, (px, y))
         return y + 18
 
     def _draw_game(self):
@@ -1958,9 +2029,10 @@ class App:
                 self.screen.blit(t, (x + 8, yy)); yy += 20
             if p.get("decl"):
                 d = p["decl"]
-                t = get_font(15).render(self._t("declared", t=self._tn(d["type"]), c=d["count"]), True,
-                                        TYPE_COLOR.get(d["type"], COLOR_GREEN))
-                self.screen.blit(t, (x + 8, yy)); yy += 20
+                _out_blit(self.screen, get_font(15),
+                          self._t("declared", t=self._tn(d["type"]), c=d["count"]),
+                          TYPE_COLOR.get(d["type"], COLOR_GREEN), (x + 8, yy))
+                yy += 20
             yy = self._draw_stall_colored(x + 8, yy, pw - 16, p) + 4
             if i == self.my_seat:
                 mine = you.get("stand_contra") or []
@@ -2067,16 +2139,20 @@ class App:
             self.screen.blit(rt, (body.x, y))
         self.screen.set_clip(None)
         if max_scroll > 0:
-            # scrollbar: track + draggable handle
-            track = pygame.Rect(body.right - 9, body.y, 7, body.height)
-            pygame.draw.rect(self.screen, (42, 36, 28), track, border_radius=3)
-            hh = max(24, int(body.height * visible / max(1, len(lines))))
-            frac = self.chat_scroll / max_scroll
+            # scrollbar: wider track + visible knob + track-click paging.
+            track = pygame.Rect(body.right - 13, body.y, 10, body.height)
+            pygame.draw.rect(self.screen, (42, 36, 28), track, border_radius=4)
+            hh = max(26, int(body.height * visible / max(1, len(lines))))
+            frac = self.chat_scroll / max(1, max_scroll)
             hy = body.y + int(frac * (body.height - hh))
-            pygame.draw.rect(self.screen, COLOR_ACCENT,
-                             (track.x, hy, 7, hh), border_radius=3)
+            knob = pygame.Rect(track.x + 1, hy, track.width - 2, hh)
+            pygame.draw.rect(self.screen, COLOR_ACCENT, knob, border_radius=4)
+            pygame.draw.rect(self.screen, (46, 36, 24), knob, 1, border_radius=4)
+            self.chat_thumb = knob
             hint = get_font(13).render(self._t("chat_scroll_hint"), True, COLOR_DIM)
             self.screen.blit(hint, (880 + 390 - hint.get_width() - 24, 70))
+        else:
+            self.chat_thumb = None
         self.chat_input.draw(self.screen)
 
         pk = (prompt or {}).get("kind")
@@ -2107,8 +2183,8 @@ class App:
         self.screen.blit(t, (30, 276))
         y = 292
         for t_ in types:
-            head = get_font(15).render(self._tn(t_), True, TYPE_COLOR.get(t_, COLOR_TEXT))
-            self.screen.blit(head, (30, y))
+            _out_blit(self.screen, get_font(15), self._tn(t_),
+                      TYPE_COLOR.get(t_, COLOR_TEXT), (30, y))
             cl = claimers.get(t_, [None, None]) or [None, None]
             c = claimed.get(t_, 0)
             rw = rewards.get(t_, [0, 0]) or [0, 0]
@@ -2178,8 +2254,8 @@ class App:
                             parts.append(f"{a['name']}+{a['bonus']}")
                         head = self._t("bm_tag")
                     line = f"{head}: " + ", ".join(parts)
-                    t = get_font(17).render(line, True, TYPE_COLOR.get(e["type"], COLOR_TEXT))
-                    self.screen.blit(t, (640, ty))
+                    _out_blit(self.screen, get_font(17), line,
+                              TYPE_COLOR.get(e["type"], COLOR_TEXT), (640, ty))
                     ty += 26
         for b in self.buttons:
             b.draw(self.screen)

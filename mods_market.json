@@ -2,9 +2,57 @@
   "version": 3,
   "mods": [
     {
+      "id": "adult_shop",
+      "folder": "adult_shop_mod",
+      "version": "1.6.4",
+      "category": "reskin",
+      "name": {
+        "en": "Adult Pleasure Shop",
+        "zh": "\u6210\u4eba\u60c5\u8da3\u7528\u54c1\u5e97"
+      },
+      "description": {
+        "en": "18+ reskin: every goods is renamed to adult-shop products (vibrating eggs, flesh sleeves, bondage rope, love potions, silk lingerie, magic wands...). Client-side only. Includes themed avatars.",
+        "zh": "18+ \u6362\u76ae\u6a21\u7ec4\uff1a\u628a\u5168\u90e8\u8d27\u7269\u6362\u6210\u60c5\u8da3\u7528\u54c1\u5e97\u7684\u52b2\u7206\u5546\u54c1\uff08\u8df3\u86cb\u3001\u540d\u5668\u3001\u675f\u7f1a\u7ef3\u3001\u7231\u60c5\u7075\u836f\u3001\u4e1d\u7ef8\u60c5\u8da3\u5185\u8863\u3001\u9707\u52a8\u68d2\u2026\u2026\uff09\uff0c\u4ec5\u5ba2\u6237\u7aef\u751f\u6548\uff0c\u9644\u914d\u5957\u4e3b\u9898\u5934\u50cf\u3002"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/adult_shop_mod.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/adult_shop_mod.zip"
+    },
+    {
+      "id": "arcane",
+      "folder": "arcane_mod",
+      "version": "1.6.4",
+      "category": "reskin",
+      "name": {
+        "en": "Arcane Realms",
+        "zh": "\u5965\u672f\u79d8\u5883"
+      },
+      "description": {
+        "en": "Fantasy reskin with arcane goods: fey fruit, familiar hens, arcane staves and elven wine. Client-side only. Includes themed avatars matching the reskin.",
+        "zh": "\u9b54\u6cd5\u4e16\u754c\u89c2\u6362\u76ae\uff1a\u4ed9\u7075\u679c\u3001\u4f7f\u9b54\u6bcd\u9e21\u3001\u5965\u672f\u6cd5\u6756\u4e0e\u7cbe\u7075\u9152\u7b49\u79d8\u6cd5\u8d27\u7269\u3002\u4ec5\u5ba2\u6237\u7aef\u751f\u6548\u3002\u9644\u5e26\u914d\u5957\u4e3b\u9898\u5934\u50cf\u3002"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/arcane_mod.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/arcane_mod.zip"
+    },
+    {
+      "id": "bribe_pot",
+      "folder": "rules_bribe_pot",
+      "version": "1.6.4",
+      "category": "rules",
+      "name": {
+        "en": "Bribe Economics",
+        "zh": "\u8d4f\u91d1\u7ecf\u6d4e"
+      },
+      "description": {
+        "en": "Half of every accepted bribe goes into a public pot split equally at game end.",
+        "zh": "\u6bcf\u7b14\u88ab\u63a5\u53d7\u7684\u8d4f\u91d1\u6709\u4e00\u534a\u8fdb\u5165\u516c\u5f00\u8d4f\u91d1\u6c60\uff0c\u7ed3\u675f\u65f6\u5747\u5206\u3002"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_bribe_pot.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_bribe_pot.zip"
+    },
+    {
       "id": "cyberpunk",
       "folder": "cyberpunk_mod",
-      "version": "1.6.3",
+      "version": "1.6.4",
       "category": "reskin",
       "name": {
         "en": "Cyberpunk Overlay",
@@ -18,9 +66,41 @@
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/cyberpunk_mod.zip"
     },
     {
+      "id": "guild_contracts",
+      "folder": "rules_guild_contracts",
+      "version": "1.6.4",
+      "category": "rules",
+      "name": {
+        "en": "Guild Contracts",
+        "zh": "\u884c\u4f1a\u5951\u7ea6"
+      },
+      "description": {
+        "en": "Secret delivery contracts at game start; fulfilled ones pay gold at the end.",
+        "zh": "\u5f00\u5c40\u53d1\u653e\u79d8\u5bc6\u5951\u7ea6\uff0c\u5b8c\u6210\u540e\u7ed3\u7b97\u91d1\u5e01\u5956\u52b1\u3002"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_guild_contracts.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_guild_contracts.zip"
+    },
+    {
+      "id": "marathon_market",
+      "folder": "rules_marathon_market",
+      "version": "1.6.4",
+      "category": "rules",
+      "name": {
+        "en": "Marathon Market",
+        "zh": "\u9a6c\u62c9\u677e\u96c6\u5e02"
+      },
+      "description": {
+        "en": "Rule mod: lengthens the match to 3 rounds per player (4 for 3-player games). All players in a room need this mod installed.",
+        "zh": "\u89c4\u5219\u6a21\u7ec4\uff1a\u5ef6\u957f\u5bf9\u5c40\uff0c\u6bcf\u540d\u73a9\u5bb6\u9ed8\u8ba4\u4e24\u56de\u5408\u6539\u4e3a\u4e09\u56de\u5408\uff083\u4eba\u5c40\u4e3a4\u56de\u5408\uff09\u3002\u623f\u95f4\u5185\u6240\u6709\u73a9\u5bb6\u90fd\u9700\u5b89\u88c5\u6b64\u6a21\u7ec4\u3002"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_marathon_market.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_marathon_market.zip"
+    },
+    {
       "id": "medieval",
       "folder": "medieval_mod",
-      "version": "1.6.3",
+      "version": "1.6.4",
       "category": "reskin",
       "name": {
         "en": "Medieval England",
@@ -34,9 +114,73 @@
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/medieval_mod.zip"
     },
     {
+      "id": "merchant_reputation",
+      "folder": "rules_merchant_reputation",
+      "version": "1.6.4",
+      "category": "rules",
+      "name": {
+        "en": "Merchant Reputation",
+        "zh": "\u5546\u4eba\u58f0\u671b"
+      },
+      "description": {
+        "en": "Honesty earns reputation; perks at 1/3/5 (extra discard, fine discount, 7-card hand).",
+        "zh": "\u8bf4\u771f\u8bdd\u83b7\u5f97\u58f0\u671b\uff0c1/3/5 \u70b9\u89e3\u9501\u591a\u5f03\u724c/\u7f5a\u91d1\u6298\u6263/7\u5f20\u624b\u724c\u3002"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_merchant_reputation.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_merchant_reputation.zip"
+    },
+    {
+      "id": "night_market",
+      "folder": "rules_night_market",
+      "version": "1.6.4",
+      "category": "rules",
+      "name": {
+        "en": "Night Market Timer",
+        "zh": "\u591c\u5e02\u573a\u65f6\u9650"
+      },
+      "description": {
+        "en": "40-second action timer per phase; timeout auto-plays a sensible default.",
+        "zh": "\u6bcf\u4e2a\u9636\u6bb5 40 \u79d2\u52a8\u4f5c\u5012\u8ba1\u65f6\uff0c\u8d85\u65f6\u81ea\u52a8\u6267\u884c\u9ed8\u8ba4\u52a8\u4f5c\u3002"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_night_market.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_night_market.zip"
+    },
+    {
+      "id": "royal_favor",
+      "folder": "rules_royal_favor",
+      "version": "1.6.4",
+      "category": "rules",
+      "name": {
+        "en": "Royal Favor",
+        "zh": "\u7687\u5bb6\u6069\u5ba0"
+      },
+      "description": {
+        "en": "Royal cards build favor; milestones 2/4/6 pay +6/+10/+18 instantly.",
+        "zh": "\u7687\u5bb6\u5361\u7d2f\u8ba1\u6069\u5ba0\uff0c2/4/6 \u5f20\u89e6\u53d1 +6/+10/+18 \u91d1\u3002"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_royal_favor.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_royal_favor.zip"
+    },
+    {
+      "id": "spice_road",
+      "folder": "rules_spice_road",
+      "version": "1.6.4",
+      "category": "rules",
+      "name": {
+        "en": "Spice Road",
+        "zh": "\u9999\u6599\u4e4b\u8def"
+      },
+      "description": {
+        "en": "Rule mod: adds a new legal goods (Pepper) and a new contraband (Tea). All players in a room need this mod installed.",
+        "zh": "\u89c4\u5219\u6a21\u7ec4\uff1a\u65b0\u589e\u5408\u6cd5\u8d27\u7269\u80e1\u6912\u4e0e\u8fdd\u7981\u54c1\u8336\u53f6\u3002\u623f\u95f4\u5185\u6240\u6709\u73a9\u5bb6\u90fd\u9700\u5b89\u88c5\u6b64\u6a21\u7ec4\u3002"
+      },
+      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_spice_road.zip",
+      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_spice_road.zip"
+    },
+    {
       "id": "starlight",
       "folder": "starlight_mod",
-      "version": "1.6.3",
+      "version": "1.6.4",
       "category": "reskin",
       "name": {
         "en": "Starlight Colony",
@@ -52,7 +196,7 @@
     {
       "id": "steampunk",
       "folder": "steampunk_mod",
-      "version": "1.6.3",
+      "version": "1.6.4",
       "category": "reskin",
       "name": {
         "en": "Steamforge City",
@@ -66,89 +210,9 @@
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/steampunk_mod.zip"
     },
     {
-      "id": "arcane",
-      "folder": "arcane_mod",
-      "version": "1.6.3",
-      "category": "reskin",
-      "name": {
-        "en": "Arcane Realms",
-        "zh": "\u5965\u672f\u79d8\u5883"
-      },
-      "description": {
-        "en": "Fantasy reskin with arcane goods: fey fruit, familiar hens, arcane staves and elven wine. Client-side only. Includes themed avatars matching the reskin.",
-        "zh": "\u9b54\u6cd5\u4e16\u754c\u89c2\u6362\u76ae\uff1a\u4ed9\u7075\u679c\u3001\u4f7f\u9b54\u6bcd\u9e21\u3001\u5965\u672f\u6cd5\u6756\u4e0e\u7cbe\u7075\u9152\u7b49\u79d8\u6cd5\u8d27\u7269\u3002\u4ec5\u5ba2\u6237\u7aef\u751f\u6548\u3002\u9644\u5e26\u914d\u5957\u4e3b\u9898\u5934\u50cf\u3002"
-      },
-      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/arcane_mod.zip",
-      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/arcane_mod.zip"
-    },
-    {
-      "id": "marathon_market",
-      "folder": "rules_marathon_market",
-      "version": "1.6.3",
-      "category": "rules",
-      "name": {
-        "en": "Marathon Market",
-        "zh": "\u9a6c\u62c9\u677e\u96c6\u5e02"
-      },
-      "description": {
-        "en": "Rule mod: lengthens the match to 3 rounds per player (4 for 3-player games). All players in a room need this mod installed.",
-        "zh": "\u89c4\u5219\u6a21\u7ec4\uff1a\u5ef6\u957f\u5bf9\u5c40\uff0c\u6bcf\u540d\u73a9\u5bb6\u9ed8\u8ba4\u4e24\u56de\u5408\u6539\u4e3a\u4e09\u56de\u5408\uff083\u4eba\u5c40\u4e3a4\u56de\u5408\uff09\u3002\u623f\u95f4\u5185\u6240\u6709\u73a9\u5bb6\u90fd\u9700\u5b89\u88c5\u6b64\u6a21\u7ec4\u3002"
-      },
-      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_marathon_market.zip",
-      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_marathon_market.zip"
-    },
-    {
-      "id": "spice_road",
-      "folder": "rules_spice_road",
-      "version": "1.6.3",
-      "category": "rules",
-      "name": {
-        "en": "Spice Road",
-        "zh": "\u9999\u6599\u4e4b\u8def"
-      },
-      "description": {
-        "en": "Rule mod: adds a new legal goods (Pepper) and a new contraband (Tea). All players in a room need this mod installed.",
-        "zh": "\u89c4\u5219\u6a21\u7ec4\uff1a\u65b0\u589e\u5408\u6cd5\u8d27\u7269\u80e1\u6912\u4e0e\u8fdd\u7981\u54c1\u8336\u53f6\u3002\u623f\u95f4\u5185\u6240\u6709\u73a9\u5bb6\u90fd\u9700\u5b89\u88c5\u6b64\u6a21\u7ec4\u3002"
-      },
-      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_spice_road.zip",
-      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_spice_road.zip"
-    },
-    {
-      "id": "bribe_pot",
-      "folder": "rules_bribe_pot",
-      "version": "1.6.3",
-      "category": "rules",
-      "name": {
-        "en": "Bribe Economics",
-        "zh": "\u8d4f\u91d1\u7ecf\u6d4e"
-      },
-      "description": {
-        "en": "Half of every accepted bribe goes into a public pot split equally at game end.",
-        "zh": "\u6bcf\u7b14\u88ab\u63a5\u53d7\u7684\u8d4f\u91d1\u6709\u4e00\u534a\u8fdb\u5165\u516c\u5f00\u8d4f\u91d1\u6c60\uff0c\u7ed3\u675f\u65f6\u5747\u5206\u3002"
-      },
-      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_bribe_pot.zip",
-      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_bribe_pot.zip"
-    },
-    {
-      "id": "night_market",
-      "folder": "rules_night_market",
-      "version": "1.6.3",
-      "category": "rules",
-      "name": {
-        "en": "Night Market Timer",
-        "zh": "\u591c\u5e02\u573a\u65f6\u9650"
-      },
-      "description": {
-        "en": "40-second action timer per phase; timeout auto-plays a sensible default.",
-        "zh": "\u6bcf\u4e2a\u9636\u6bb5 40 \u79d2\u52a8\u4f5c\u5012\u8ba1\u65f6\uff0c\u8d85\u65f6\u81ea\u52a8\u6267\u884c\u9ed8\u8ba4\u52a8\u4f5c\u3002"
-      },
-      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_night_market.zip",
-      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_night_market.zip"
-    },
-    {
       "id": "trade_caravans",
       "folder": "rules_trade_caravans",
-      "version": "1.6.3",
+      "version": "1.6.4",
       "category": "rules",
       "name": {
         "en": "Trade Caravans",
@@ -160,54 +224,6 @@
       },
       "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_trade_caravans.zip",
       "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_trade_caravans.zip"
-    },
-    {
-      "id": "guild_contracts",
-      "folder": "rules_guild_contracts",
-      "version": "1.6.3",
-      "category": "rules",
-      "name": {
-        "en": "Guild Contracts",
-        "zh": "\u884c\u4f1a\u5951\u7ea6"
-      },
-      "description": {
-        "en": "Secret delivery contracts at game start; fulfilled ones pay gold at the end.",
-        "zh": "\u5f00\u5c40\u53d1\u653e\u79d8\u5bc6\u5951\u7ea6\uff0c\u5b8c\u6210\u540e\u7ed3\u7b97\u91d1\u5e01\u5956\u52b1\u3002"
-      },
-      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_guild_contracts.zip",
-      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_guild_contracts.zip"
-    },
-    {
-      "id": "royal_favor",
-      "folder": "rules_royal_favor",
-      "version": "1.6.3",
-      "category": "rules",
-      "name": {
-        "en": "Royal Favor",
-        "zh": "\u7687\u5bb6\u6069\u5ba0"
-      },
-      "description": {
-        "en": "Royal cards build favor; milestones 2/4/6 pay +6/+10/+18 instantly.",
-        "zh": "\u7687\u5bb6\u5361\u7d2f\u8ba1\u6069\u5ba0\uff0c2/4/6 \u5f20\u89e6\u53d1 +6/+10/+18 \u91d1\u3002"
-      },
-      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_royal_favor.zip",
-      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_royal_favor.zip"
-    },
-    {
-      "id": "merchant_reputation",
-      "folder": "rules_merchant_reputation",
-      "version": "1.6.3",
-      "category": "rules",
-      "name": {
-        "en": "Merchant Reputation",
-        "zh": "\u5546\u4eba\u58f0\u671b"
-      },
-      "description": {
-        "en": "Honesty earns reputation; perks at 1/3/5 (extra discard, fine discount, 7-card hand).",
-        "zh": "\u8bf4\u771f\u8bdd\u83b7\u5f97\u58f0\u671b\uff0c1/3/5 \u70b9\u89e3\u9501\u591a\u5f03\u724c/\u7f5a\u91d1\u6298\u6263/7\u5f20\u624b\u724c\u3002"
-      },
-      "url": "https://cdn.jsdelivr.net/gh/GinyvaXu/SheriffOfNottingham---Ultimate@main/mods_pack/rules_merchant_reputation.zip",
-      "url2": "https://raw.githubusercontent.com/GinyvaXu/SheriffOfNottingham---Ultimate/main/mods_pack/rules_merchant_reputation.zip"
     }
   ]
 }

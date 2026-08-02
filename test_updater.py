@@ -218,6 +218,10 @@ class ApplyTest(unittest.TestCase):
                 # args = (bat, [exe, installer, flag])
                 self.assertEqual(args[1][0], exe)
                 self.assertEqual(args[1][1], inst)
+                # %4 = boot marker the relaunched game writes on a good boot
+                self.assertEqual(args[1][3], updater.boot_marker())
+                with open(bat, encoding="ascii", errors="replace") as f:
+                    self.assertIn('set "BOOT=%~4"', f.read())
                 # flag now records the batch pid so stale flags can be told apart
                 with open(updater._pending_flag(), encoding="ascii") as f:
                     flag_text = f.read()

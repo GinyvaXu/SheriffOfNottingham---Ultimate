@@ -230,6 +230,7 @@ def _launch_bat(bat_path, args=None):
 
 _PENDING_FLAG = "update_pending.flag"
 _FLAG_MAX_AGE = 600.0  # seconds; a hung batch older than this is considered stale
+_BOOT_FLAG = "boot_ok.flag"  # written by the game once its GUI is up
 
 
 def _pending_flag():
@@ -287,6 +288,31 @@ def _flag_is_stale(pid, age):
     return True  # no live batch process behind the flag -> stale
 
 
+def boot_marker():
+    """Path of the boot-OK marker the update batch watches for."""
+    return os.path.join(download_dir(), _BOOT_FLAG)
+
+
+def mark_boot_ok():
+    """Write the boot-OK marker after the game initializes.
+
+    The update batch only considers the relaunched game a success when this
+    marker appears. A PyInstaller onefile boot failure (e.g. antivirus racing
+    the extraction -> "Failed to load Python DLL ... python312.dll") happens
+    before any Python code runs, so no marker is written and the batch retries
+    with a fresh launch instead of declaring victory while an error dialog is
+    stuck on screen.
+    """
+    try:
+        p = boot_marker()
+        os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+        with io.open(p, "w", encoding="ascii") as f:
+            f.write("ver=%s\nts=%d\n" % (version.__version__, int(time.time())))
+        return True
+    except Exception:  # noqa: BLE001 - best effort only
+        return False
+
+
 def apply_update(installer_path, exe_path=None):
     """Schedule the silent reinstall + relaunch. Returns True on success.
 
@@ -316,13 +342,14 @@ def apply_update(installer_path, exe_path=None):
     bat = os.path.join(download_dir(), "run_update.bat")
     with io.open(flag, "w", encoding="ascii") as f:
         f.write("pid=0\nts=%d\n" % int(time.time()))
-    # %1 = game exe, %2 = installer, %3 = pending flag
+    # %1 = game exe, %2 = installer, %3 = pending flag, %4 = boot marker
     lines = [
         '@echo off',
         'setlocal enabledelayedexpansion',
         'set "EXE=%~1"',
         'set "INST=%~2"',
         'set "FLAG=%~3"',
+        'set "BOOT=%~4"',
         'set "LOG=%~dp0update.log"',
         'set "INNO=%~dp0inno_install.log"',
         'set "NAME=%~n1"',
@@ -358,22 +385,38 @@ def apply_update(installer_path, exe_path=None):
         '  echo [%date% %time%] install failed after retries, opening releases page >> "%LOG%"',
         '  start "" "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases"',
         ')',
-        'rem launch the new game from its own folder. The first boot of a fresh',
-        'rem one-file exe can be slowed by antivirus scans and look like a quick',
-        'rem crash, so we settle, start, verify it actually runs, and retry a few',
-        'rem times before giving up. The installer/flag are kept until the new',
-        'rem game is confirmed running.',
+        'rem launch the new game and watch for a real boot. The game writes',
+        'rem %BOOT% once its GUI is up. The first boot of a fresh onefile exe',
+        'rem can be raced by antivirus scans that break the onefile extraction',
+        'rem (the classic "Failed to load Python DLL ... python312.dll" bootloader',
+        'rem error). So we give the AV a head start, wait for the marker, and',
+        'rem retry several times; a process object alone is NOT proof of a boot',
+        'rem (a stuck bootloader error dialog would fool that check).',
         'set /a n=0',
         ':launch',
-        'powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3"',
-        'if exist "%EXE%" powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath \'%EXE%\' -WorkingDirectory \'%~dp1\'"',
-        'powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 6"',
-        'powershell -NoProfile -WindowStyle Hidden -Command "if (Get-Process -Name \'%NAME%\' -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt (Get-Date).AddSeconds(-25) }) { exit 0 } else { exit 1 }"',
-        'if errorlevel 1 (',
-        '  set /a n+=1',
-        '  if !n! lss 3 ( goto launch )',
-        '  echo [%date% %time%] could not relaunch game >> "%LOG%"',
+        'set /a n+=1',
+        'if !n! gtr 6 (',
+        '  echo [%date% %time%] could not boot new game after 6 tries >> "%LOG%"',
+        '  start "" "https://github.com/GinyvaXu/SheriffOfNottingham---Ultimate/releases"',
+        '  goto end',
         ')',
+        'echo [%date% %time%] launch try !n! >> "%LOG%"',
+        'powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 8"',
+        'if exist "%BOOT%" del "%BOOT%" >nul 2>&1',
+        'if exist "%EXE%" powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath \'%EXE%\' -WorkingDirectory \'%~dp1\'"',
+        'set /a w=0',
+        ':watch',
+        'powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3"',
+        'if exist "%BOOT%" ( echo [%date% %time%] new game booted OK >> "%LOG%" & goto end )',
+        'powershell -NoProfile -WindowStyle Hidden -Command "if (Get-Process -Name \'%NAME%\' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"',
+        'if errorlevel 1 ( echo [%date% %time%] boot failed on try !n! >> "%LOG%" & goto launch )',
+        'set /a w+=3',
+        'if !w! lss 120 goto watch',
+        'rem process alive but no marker for 2 minutes: an antivirus / Smart App',
+        'rem Control dialog is likely open and the user is dealing with it; stop',
+        'rem watching and finish (the installer is already installed).',
+        'echo [%date% %time%] game alive but boot marker missing, stopped watching >> "%LOG%"',
+        ':end',
         'echo [%date% %time%] batch finished >> "%LOG%"',
         'del "%INST%" >nul 2>&1',
         'del "%FLAG%" >nul 2>&1',
@@ -381,7 +424,9 @@ def apply_update(installer_path, exe_path=None):
     ]
     with io.open(bat, "w", encoding="ascii", errors="replace", newline="") as f:
         f.write("\r\n".join(lines) + "\r\n")
-    proc = _launch_bat(bat, [exe_path, installer_path, flag])
+    # %1 = exe, %2 = installer, %3 = pending flag, %4 = boot marker the
+    # relaunched game writes once its GUI is up (see main.py).
+    proc = _launch_bat(bat, [exe_path, installer_path, flag, boot_marker()])
     if proc is None:
         try:
             os.remove(flag)

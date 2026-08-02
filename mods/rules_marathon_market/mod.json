@@ -2,7 +2,7 @@
   "id": "marathon_market",
   "name": "Marathon Market",
   "name_zh": "马拉松集市",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "Rule mod: lengthens the match to 3 rounds per player (4 for 3-player games).",
   "description_zh": "延长对局：每名玩家默认两回合改为三回合（3人局为4回合），更考验策略。",
   "category": "rules",

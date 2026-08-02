@@ -459,7 +459,10 @@ def rules_mods(base=None):
         out.append({"id": str(info["id"]),
                     "version": str(info["version"]),
                     "name": str(info["name"]),
-                    "name_zh": str(info.get("name_zh", ""))})
+                    "name_zh": str(info.get("name_zh", "")),
+                    "category": str(info.get("category", "rules")),
+                    "description": str(info.get("description", "")),
+                    "description_zh": str(info.get("description_zh", ""))})
     out.sort(key=lambda m: m["id"])
     return out
 
