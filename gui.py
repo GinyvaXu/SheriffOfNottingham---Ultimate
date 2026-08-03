@@ -140,23 +140,66 @@ def _font_candidates():
     return [p for p in cands if os.path.exists(p)]
 
 
+def _font_usable(f):
+    """True when ``f`` can actually render text.
+
+    A corrupt/truncated font file makes ``pygame.font.Font`` succeed
+    silently with a NULL internal SDL_ttf pointer; the first ``size()`` or
+    ``render()`` call on it then raises ``pygame.error: Passed a NULL
+    pointer`` (or can even hard-crash). Probing here lets get_font skip
+    such broken files instead of returning a font that explodes later.
+    """
+    try:
+        f.size("Test 测试 Test")
+        f.render("Test 测试", True, (255, 255, 255))
+        return True
+    except Exception:  # noqa: BLE001 - a broken font must never crash the game
+        return False
+
+
+def fit_name_font(name, max_w, fs_start=15, min_fs=9):
+    """Shrink the point size until ``name`` fits in ``max_w`` px, then trim
+    extremely long names with an ellipsis. Returns ``(font, text)``.
+
+    The old in-panel loop used ``get_font(font.get_height() - 1)`` which
+    *grew* the point size (line height is larger than the point size), so a
+    long name in a narrow 5-6 player panel ramped the font size up until
+    SDL_ttf refused to open it, pygame returned a NULL-font object, and the
+    next ``size()`` raised ``pygame.error: Passed a NULL pointer``.
+    """
+    fs = max(int(fs_start), int(min_fs))
+    f = get_font(fs)
+    while f.size(name)[0] > max_w and fs > min_fs:
+        fs -= 1
+        f = get_font(fs)
+    if f.size(name)[0] > max_w and len(name) > 1:
+        cut = name
+        while cut and f.size(cut + "…")[0] > max_w:
+            cut = cut[:-1]
+        name = (cut + "…") if cut else name[0] + "…"
+    return f, name
+
+
 def get_font(size):
+    pygame.font.init()   # idempotent - get_font must work on its own
     if size in _FONT_CACHE:
         return _FONT_CACHE[size]
-    f = None
     for p in _font_candidates():
         try:
             f = pygame.font.Font(p, size)
-            break
-        except Exception:
+            if _font_usable(f):
+                _FONT_CACHE[size] = f
+                return f
+        except Exception:  # noqa: BLE001 - try the next candidate
             continue
-    if f is None:
-        try:
-            f = pygame.font.SysFont("arial", size)
-        except Exception:
-            f = pygame.font.Font(None, size)
-    _FONT_CACHE[size] = f
-    return f
+    try:
+        f = pygame.font.SysFont("arial", size)
+    except Exception:  # noqa: BLE001 - fall back to the bundled default font
+        f = pygame.font.Font(None, size)
+    if _font_usable(f):
+        _FONT_CACHE[size] = f
+        return f
+    raise RuntimeError("no usable font found (size %s)" % size)
 
 
 _TEXT_OUTLINE = (24, 18, 12)   # dark outline behind bright card/goods text
@@ -2839,12 +2882,9 @@ class App:
         av = 26 if small else 32
         self.screen.blit(gfx.avatar_surface(p.get("avatar"), av),
                          (x + w - av - 6, y + 6))
-        f_name = get_font(15 if small else 17)
         tag = self._t("sheriff_tag") if sheriff else ""
-        name_t = tag + p.get("name", "?")
-        while (f_name.size(name_t)[0] > w - av - 18
-               and f_name.get_height() > 11):
-            f_name = get_font(f_name.get_height() - 1)
+        f_name, name_t = fit_name_font(tag + p.get("name", "?"),
+                                       w - av - 18, 15 if small else 17)
         col = COLOR_ACCENT if sheriff else COLOR_TEXT
         self.screen.blit(f_name.render(name_t, True, col), (x + 8, y + 6))
         if not p.get("connected", True):

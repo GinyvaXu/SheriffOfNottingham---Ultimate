@@ -27,3 +27,7 @@ smoke3*/
 smoke3_*.png
 smoke3_*.txt
 s3*.txt
+
+# smoke test outputs
+smoke5*/
+smoke5_*.txt

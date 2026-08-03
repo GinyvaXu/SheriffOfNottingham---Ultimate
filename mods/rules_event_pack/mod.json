@@ -2,7 +2,7 @@
   "id": "event_pack",
   "name": "Twists of Fate Event Pack",
   "name_zh": "风云变幻事件包",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "description": "Rule mod: one public event is revealed at the start of each round and lasts until round end. 20 medium/low events: Bountiful Harvest (+1 market draw), Famine (bag max 4), Plague (one legal good banned from bags; wild cards cannot become it), Market Day (truthful pay +1/card), Tax Levy (1 gold to seal), Inspector Visit (must inspect at least 1), Lockdown (contraband fines x2), Amnesty Day (seized without fine), Black Market Boom (smuggled contraband +1 value), Rumors (sheriff peeks 1 card), Apple Blight (apples banned from bags), Cheese Festival (cheese +1 value), Zero Tolerance (contraband fines +3), Double Compensation (truthful pay x2), Shortage (market discard max 4), Parade Day (+3 gold per smuggler at round end), Bounty Board (+5 gold first smuggler), Sheriff Payday (+3 gold per confiscated card), Rumors Pro (peek 1 card per merchant), Royal Treasury (bribes up to 2x gold).",
   "description_zh": "玩法模组：每回合开始公开 1 张事件卡，本回合内生效。20 个中低难度事件：丰收之年（市场多摸1张）、饥荒之年（装袋上限4张）、瘟疫蔓延（随机合法货禁运，万能卡也不能变）、集市日（查实赔偿+1金/张）、城门税（装袋缴1金）、官员视察（警长必须至少查1人）、全城封锁（违禁品罚款翻倍）、恩赦日（只没收不罚款）、黑市行情（走私违禁品价值+1）、街头谣言（警长偷看1张牌）、苹果歉收（苹果禁装袋）、奶酪盛典（奶酪价值+1）、零容忍（违禁品罚金+3）、双倍赔偿（查实赔偿翻倍）、物资短缺（市场最多弃4张）、游园日（回合末走私者各+3金）、赏金榜（首位走私者+5金）、警长加薪（每没收一件+3金）、谣言升级（每人可偷看1张）、金库充盈（贿赂上限2倍）。局内聊天栏上方常驻事件详情。",
   "category": "rules",

@@ -2,7 +2,7 @@
   "id": "sheriff_intel",
   "name": "Sheriff Intel",
   "name_zh": "警长情报",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "description": "Rule mod: once per round the sheriff may pay gold equal to the total cards still in un-inspected bags to learn how many of them are contraband (reported as 0-2 / 3-5 / ...). Needs 2+ merchants left to inspect.",
   "description_zh": "玩法模组：每回合警长有一次机会支付金币（等于剩余未查玩家袋中物品数量之和），获知剩余袋中违禁品的数量区间（0-2 / 3-5 依此类推）。仅当待查商人不少于两人时可用。",
   "category": "rules",

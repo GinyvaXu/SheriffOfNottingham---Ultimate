@@ -4,7 +4,7 @@
     {
       "id": "adult_shop",
       "folder": "adult_shop_mod",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "reskin",
       "name": {
         "en": "Adult Pleasure Shop",
@@ -20,7 +20,7 @@
     {
       "id": "arcane",
       "folder": "arcane_mod",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "reskin",
       "name": {
         "en": "Arcane Realms",
@@ -36,7 +36,7 @@
     {
       "id": "bribe_pot",
       "folder": "rules_bribe_pot",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Bribe Economics",
@@ -52,7 +52,7 @@
     {
       "id": "cyberpunk",
       "folder": "cyberpunk_mod",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "reskin",
       "name": {
         "en": "Cyberpunk Overlay",
@@ -68,7 +68,7 @@
     {
       "id": "guild_contracts",
       "folder": "rules_guild_contracts",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Guild Contracts",
@@ -84,7 +84,7 @@
     {
       "id": "marathon_market",
       "folder": "rules_marathon_market",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Marathon Market",
@@ -100,7 +100,7 @@
     {
       "id": "medieval",
       "folder": "medieval_mod",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "reskin",
       "name": {
         "en": "Medieval England",
@@ -116,7 +116,7 @@
     {
       "id": "merchant_reputation",
       "folder": "rules_merchant_reputation",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Merchant Reputation",
@@ -132,7 +132,7 @@
     {
       "id": "night_market",
       "folder": "rules_night_market",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Night Market Timer",
@@ -148,7 +148,7 @@
     {
       "id": "royal_favor",
       "folder": "rules_royal_favor",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Royal Favor",
@@ -164,7 +164,7 @@
     {
       "id": "spice_road",
       "folder": "rules_spice_road",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Spice Road",
@@ -180,7 +180,7 @@
     {
       "id": "starlight",
       "folder": "starlight_mod",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "reskin",
       "name": {
         "en": "Starlight Colony",
@@ -196,7 +196,7 @@
     {
       "id": "steampunk",
       "folder": "steampunk_mod",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "reskin",
       "name": {
         "en": "Steamforge City",
@@ -212,7 +212,7 @@
     {
       "id": "trade_caravans",
       "folder": "rules_trade_caravans",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Trade Caravans",
@@ -228,7 +228,7 @@
     {
       "id": "wild_card",
       "folder": "rules_wild_card",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Wild Card",
@@ -244,7 +244,7 @@
     {
       "id": "sheriff_intel",
       "folder": "rules_sheriff_intel",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Sheriff Intel",
@@ -260,7 +260,7 @@
     {
       "id": "super_contraband",
       "folder": "rules_super_contraband",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Super Contraband",
@@ -276,7 +276,7 @@
     {
       "id": "event_pack",
       "folder": "rules_event_pack",
-      "version": "1.7.3",
+      "version": "1.7.4",
       "category": "rules",
       "name": {
         "en": "Twists of Fate Event Pack",
