@@ -173,7 +173,19 @@ def mods_base():
     if env:
         return env
     if getattr(sys, "frozen", False):
-        return os.path.join(os.path.dirname(sys.executable), MODS_DIR)
+        # Installed builds use the writable mods/ folder next to the exe (the
+        # installer ships it there). Portable onedir builds fall back to the
+        # bundled read-only copy under ``_internal``; effective_mods_base()
+        # migrates it to %APPDATA% when it turns out to be read-only.
+        exe_dir_mods = os.path.join(os.path.dirname(sys.executable), MODS_DIR)
+        if os.path.isdir(exe_dir_mods):
+            return exe_dir_mods
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            bundled = os.path.join(meipass, MODS_DIR)
+            if os.path.isdir(bundled):
+                return bundled
+        return exe_dir_mods
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), MODS_DIR)
 
 

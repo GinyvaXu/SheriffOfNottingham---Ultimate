@@ -276,9 +276,10 @@ See the header of `sign_assets.ps1` for details.
 python -m PyInstaller --clean --noconfirm SheriffOfNottingham.spec
 ```
 
-- Produces `dist\SheriffOfNottingham.exe` (~41 MB, single file, no Python install
-  needed) with version info 1.6.0 and a bundled `mods\` copy; the running exe
-  reads `mods\` **next to itself**, so you can add/remove mods freely.
+- Produces a folder build `dist\SheriffOfNottingham\` (exe + permanent
+  `_internal\` runtime, no Python install needed, no self-extraction) with
+  version info 1.6.5 and a bundled `mods\` copy; the running exe reads `mods\`
+  **next to itself**, so you can add/remove mods freely.
 - The first run as host triggers a Windows Firewall prompt; allow it to open the port.
 - To see error output, package with `--console` or run `python main.py` directly.
 - The exe accepts the same CLI args: `SheriffOfNottingham.exe --host --players 4`

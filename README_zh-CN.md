@@ -245,9 +245,9 @@ Trusted Signing）同时签名游戏 exe 与安装包，然后执行：
 python -m PyInstaller --clean --noconfirm SheriffOfNottingham.spec
 ```
 
-- 生成 `dist\SheriffOfNottingham.exe`（约 41MB，单文件，无需安装 Python），
-  带 1.6.0 版本信息与内置 `mods\` 副本；运行时读取 exe **旁**的 `mods\` 目录，
-  可自由增删模组。
+- 生成文件夹版 `dist\SheriffOfNottingham\`（exe + 常驻 `_internal\` 运行库，
+  无需安装 Python，不再临时自解压），带 1.6.5 版本信息与内置 `mods\` 副本；
+  运行时读取 exe **旁**的 `mods\` 目录，可自由增删模组。
 - 房主首次运行会触发 Windows 防火墙提示，请允许以开放端口。
 - 查看报错可改用 `--console` 打包，或直接运行 `python main.py`。
 - exe 支持相同命令行参数：`SheriffOfNottingham.exe --host --players 4`

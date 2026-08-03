@@ -1,8 +1,8 @@
-; Sheriff of Nottingham - Inno Setup installer script (v1.6.4)
+; Sheriff of Nottingham - Inno Setup installer script (v1.6.5)
 ; Compile: "C:\Users\zhenl\InnoSetup6\ISCC.exe" installer.iss
 
 #define MyAppName "Sheriff of Nottingham"
-#define MyAppVersion "1.6.4"
+#define MyAppVersion "1.6.5"
 #define MyAppPublisher "Sheriff Project"
 #define MyAppExeName "SheriffOfNottingham.exe"
 
@@ -43,7 +43,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "{app}\mods"; Permissions: users-modify
 
 [Files]
-Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; onedir build: the exe plus the permanent _internal folder
+; (python312.dll, assets, bundled mods) - no %TEMP% extraction at runtime.
+Source: "dist\SheriffOfNottingham\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "mods\*"; DestDir: "{app}\mods"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
