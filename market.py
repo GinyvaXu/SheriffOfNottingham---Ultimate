@@ -20,9 +20,14 @@ import zipfile
 import mods
 import updater
 
+_RAW_MANIFEST = ("https://raw.githubusercontent.com/GinyvaXu/"
+                 "SheriffOfNottingham---Ultimate/main/mods_market.json")
 MANIFEST_SOURCES = [
-    "https://raw.githubusercontent.com/GinyvaXu/"
-    "SheriffOfNottingham---Ultimate/main/mods_market.json",
+    "https://ghfast.top/" + _RAW_MANIFEST,
+    _RAW_MANIFEST,
+    "https://ghproxy.net/" + _RAW_MANIFEST,
+    "https://gh.llkk.cc/" + _RAW_MANIFEST,
+    "https://gh-proxy.com/" + _RAW_MANIFEST,
     "https://cdn.jsdelivr.net/gh/GinyvaXu/"
     "SheriffOfNottingham---Ultimate@main/mods_market.json",
 ]
@@ -66,7 +71,14 @@ def _download_zip(info, timeout=_DOWNLOAD_TIMEOUT):
     """Download a mod zip into %TEMP%; returns the local path (raises on fail)."""
     dest = os.path.join(tempfile.gettempdir(), "SheriffMods")
     os.makedirs(dest, exist_ok=True)
-    urls = [u for u in (info.get("url"), info.get("url2")) if u]
+    # GitHub mirrors (url2 + proxy variants) are preferred over the jsDelivr
+    # CDN (url), whose GitHub cache can lag behind and whose size limit rules
+    # out bigger zips.
+    urls = []
+    for key in ("url2", "url"):
+        u = info.get(key)
+        if u:
+            urls.extend(updater.mirror_urls(u))
     fname = str(info.get("folder") or info.get("id") or "mod") + ".zip"
     path = os.path.join(dest, fname)
     last_err = None

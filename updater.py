@@ -10,10 +10,14 @@ latest published release::
       "notes": "..."
     }
 
-``check_for_update()`` tries several sources in order (raw.githubusercontent,
-the jsDelivr CDN mirror, then the GitHub releases API) so that slow or
-blocked networks do not break the check, and returns a friendly error code
-("timeout" / "network" / "unknown") instead of a raw exception string.
+``check_for_update()`` tries several sources in order - community GitHub
+acceleration proxies usable from mainland China (ghfast.top, gh-proxy.com,
+ghproxy.net, gh.llkk.cc), raw.githubusercontent.com and the GitHub releases
+API - so that slow or blocked networks do not break the check, and returns a
+friendly error code ("timeout" / "network" / "unknown") instead of a raw
+exception string. Installers are downloaded through the same proxy fallback,
+and advanced users can point the game at their own mirror (for example a
+Gitee repo) with %APPDATA%/SheriffOfNottingham/mirror.json.
 
 In frozen (exe) builds the player can download the new installer and
 silently reinstall: the game exits, a small .bat in %TEMP% waits for the
@@ -37,11 +41,25 @@ import urllib.request
 
 import version
 
+# Community GitHub acceleration proxies that stay reachable from mainland
+# China when api/raw.githubusercontent.com are slow or blocked. The list is
+# tried in order until one works; entries die and new ones appear over time,
+# so keeping several is what makes the auto-update resilient.
+GITHUB_PROXIES = [
+    "https://ghfast.top/",
+    "https://gh-proxy.com/",
+    "https://ghproxy.net/",
+    "https://gh.llkk.cc/",
+]
+
+_RAW_MANIFEST = ("https://raw.githubusercontent.com/GinyvaXu/"
+                 "SheriffOfNottingham---Ultimate/main/update.json")
 MANIFEST_SOURCES = [
-    ("raw", "https://raw.githubusercontent.com/GinyvaXu/"
-            "SheriffOfNottingham---Ultimate/main/update.json"),
-    ("cdn", "https://cdn.jsdelivr.net/gh/GinyvaXu/"
-            "SheriffOfNottingham---Ultimate@main/update.json"),
+    ("ghfast", "https://ghfast.top/" + _RAW_MANIFEST),
+    ("raw", _RAW_MANIFEST),
+    ("ghproxynet", "https://ghproxy.net/" + _RAW_MANIFEST),
+    ("llkk", "https://gh.llkk.cc/" + _RAW_MANIFEST),
+    ("ghproxycom", "https://gh-proxy.com/" + _RAW_MANIFEST),
     ("api", "https://api.github.com/repos/GinyvaXu/"
             "SheriffOfNottingham---Ultimate/releases/latest"),
 ]
@@ -115,6 +133,50 @@ def _from_release_api(data):
     return tag, url, notes
 
 
+def mirror_urls(url):
+    """Expand a GitHub URL into [direct] + [mainland-China proxy mirrors].
+
+    Non-GitHub URLs (for example a self-hosted mirror or jsDelivr) are
+    returned unchanged as a single candidate.
+    """
+    if not url:
+        return []
+    if "github.com/" not in url:
+        return [url]
+    return [url] + [p + url for p in GITHUB_PROXIES]
+
+
+_MIRROR_FILE = "mirror.json"
+
+
+def custom_mirror():
+    """Optional user mirror config from the app-data folder (advanced).
+
+    Players in mainland China who maintain their own mirror (for example a
+    Gitee repo) can point the game at it with
+    ``%APPDATA%/SheriffOfNottingham/mirror.json``::
+
+        {"manifest": "https://gitee.com/USER/REPO/raw/main/update.json",
+         "installer": "https://gitee.com/USER/REPO/releases/download/vX/Setup.exe"}
+
+    Both keys are optional. ``manifest`` is tried before the built-in
+    sources; ``installer`` replaces the GitHub download URL (proxy mirrors
+    still apply when the value itself is hosted on GitHub). A missing or
+    broken config is ignored - it must never break the update flow.
+    """
+    try:
+        import profile
+        p = os.path.join(profile.app_dir(), _MIRROR_FILE)
+        with io.open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        return {k: str(data.get(k, "") or "").strip()
+                for k in ("manifest", "installer")}
+    except Exception:  # noqa: BLE001 - never crash the update flow
+        return {}
+
+
 def check_for_update(timeout=_DEFAULT_TIMEOUT):
     """Return a status dict, never raises.
 
@@ -123,7 +185,11 @@ def check_for_update(timeout=_DEFAULT_TIMEOUT):
     """
     current = version.__version__
     last_err = None
-    for kind, url in MANIFEST_SOURCES:
+    custom = custom_mirror().get("manifest") or ""
+    sources = MANIFEST_SOURCES
+    if custom:
+        sources = [("custom", custom)] + list(MANIFEST_SOURCES)
+    for kind, url in sources:
         try:
             if kind == "api":
                 data = _fetch(url, timeout)
@@ -179,24 +245,35 @@ def download_installer(url, dest_dir=None, progress=None, timeout=_DOWNLOAD_TIME
     """Download the installer to a temp folder; returns the local path.
 
     ``progress`` is called as progress(got_bytes, total_bytes) when known.
-    Retries ``attempts`` times; the last exception propagates to the caller.
+
+    GitHub-hosted installers are expanded into [direct] + China proxy
+    mirrors; each candidate is tried once, so a blocked direct URL in
+    mainland China automatically falls back to the first reachable mirror.
+    A custom ``mirror.json`` ``installer`` value replaces ``url`` entirely.
+    Single-candidate downloads keep the ``attempts`` retry budget.
     """
     dest_dir = dest_dir or download_dir()
     os.makedirs(dest_dir, exist_ok=True)
-    fname = os.path.basename(url.split("?")[0]) or "SheriffOfNottingham-Setup.exe"
+    custom = custom_mirror().get("installer") or ""
+    candidates = mirror_urls(custom or url)
+    if not candidates:
+        raise ValueError("no download URL")
+    fname = os.path.basename(candidates[0].split("?")[0]) or "SheriffOfNottingham-Setup.exe"
     path = os.path.join(dest_dir, fname)
     last_err = None
-    for attempt in range(max(1, attempts)):
-        try:
-            _download_once(url, path, timeout, progress)
-            return path
-        except Exception as e:  # noqa: BLE001
-            last_err = e
+    for cand in candidates:
+        cand_attempts = max(1, attempts) if len(candidates) == 1 else 1
+        for _ in range(cand_attempts):
             try:
-                if os.path.exists(path):
-                    os.remove(path)
-            except OSError:
-                pass
+                _download_once(cand, path, timeout, progress)
+                return path
+            except Exception as e:  # noqa: BLE001 - try the next mirror
+                last_err = e
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except OSError:
+                    pass
     raise last_err
 
 

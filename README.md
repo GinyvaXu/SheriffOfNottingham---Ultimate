@@ -1,4 +1,4 @@
-**English** | [??](README_zh-CN.md)
+**English** | [中文](README_zh-CN.md)
 
 # Sheriff of Nottingham - Python Lite Online
 
@@ -10,11 +10,12 @@ v1.2.0 adds a **game icon**, decorative in-game graphics, an **in-game mods mana
 v1.2.1 adds **automatic update checking** (startup check + menu button) and one-click silent reinstall from GitHub releases.
 v1.2.2 fixes **mod enable/disable save failures** (UTF-8 BOM manifests and read-only files) and makes the **update check** resilient (jsDelivr + GitHub API fallback sources, retries, friendly timeout/network messages).
 v1.2.3 fixes **"mod.json not writable" after installing under Program Files**: the installer grants write permission on the mods folder, the game self-repairs folder ACLs (icacls) on demand, and automatically falls back to a per-user mods folder under %APPDATA% (with migration) when the install folder is still not writable. The Mods screen now shows the actual mods folder path.
-v1.3.0 adds an in-game **Mods Market** (browse the GitHub-hosted catalog, one-click download & install), ships **5 text-only reskin mods** (cyberpunk / medieval / starlight / steampunk / arcane), and makes server **chat messages follow the local reskin** ? reskins are client-side only, so each player online sees their own version.
+v1.3.0 adds an in-game **Mods Market** (browse the GitHub-hosted catalog, one-click download & install), ships **5 text-only reskin mods** (cyberpunk / medieval / starlight / steampunk / arcane), and makes server **chat messages follow the local reskin** — reskins are client-side only, so each player online sees their own version.
 v1.4.0 adds **rule mods** (gameplay-changing mods) with a **server-side room check**: everyone in a room must have the same rule mods installed (id + version), the lobby shows each player's mod status and offers **one-click download & install** of missing rule mods. Ships two example rule mods (**Marathon Market**, **Spice Road**).
 v1.4.1 adds **player profiles & avatars**: your name + avatar are saved in `%APPDATA%/SheriffOfNottingham/profile.json` and restored on every launch; pick one of **8 built-in avatars** or **upload your own picture** (auto-downscaled and shared with everyone in the room); avatars appear in the menu, lobby, player panels and results screen. The **5 reskin mods now include themed avatar palettes** matching their world. Also: the **Mods/Market screens list every mod** (Spice Road is no longer hidden), a **Restart Game** button appears after enabling or installing mods, and the **update-restart flow is fixed** (single-CRLF batch file, waits for the old process to fully exit). New gameplay-mod ideas are detailed in **MOD_IDEAS.md** for review.
 v1.6.6 adds four new **rule mods**: **Wild Card** (the host sets how many wild cards go into the deck; they are legal goods, and any wild card in your bag automatically becomes the goods you declared when inspected), **Sheriff Intel** (once per round the Sheriff may pay n coins - the total cards left in the un-inspected bags - to learn how many contraband cards remain among the waiting merchants, as a range such as 0-2 or 3-5, only when at least two merchants are still waiting), **Super Contraband** (each contraband type gets one super card worth triple its value and triple its fine), and **Merchant Reputation v2** (legal goods that simply don't match your declared type no longer cost reputation; positive reputation makes you draw legal goods more often - at reputation 5 each card is 90% legal; negative reputation raises contraband odds but is tuned down to leave room to recover). All bundled mod versions are synced with the game build (1.6.6).
 v1.6.7 adds the **Twists of Fate Event Pack** (风云变幻事件包) rule mod: at the start of every round one public event card is revealed and stays in effect until the round ends. Its 10 medium/low-difficulty events are **Bountiful Harvest** (+1 market draw), **Famine** (bag max 4 cards), **Plague** (one legal good is banned from bags - wild cards cannot become it either), **Market Day** (truthful inspections pay +1 gold per card), **City Gate Tax** (pay 1 gold to seal your bag), **Inspector Visit** (the Sheriff must inspect at least one merchant), **Full Lockdown** (contraband fines x2, super contraband included), **Amnesty Day** (seized without fine), **Black Market Boom** (smuggled contraband is worth +1), and **Street Rumors** (the Sheriff may peek at one card from a waiting merchant, once per round). The event name and full effect stay visible in a banner above the in-game chat; during Plague the banned goods are listed and greyed out when packing, and the Sheriff gets a **Peek** button while inspecting. Bots respect bag limits and the ban; Black Market missions are unaffected (confirmed). Also: the lobby wild-card count input is now clickable, lobby rule-mod rows expand to show full bilingual rules, declaring with wild cards reports how many counted as your declared goods, the in-game chat history has a real scrollbar, and the chat no longer crashes when empty. All bundled mod versions are synced with the game build (1.6.7).
+v1.6.9 makes **auto-update work in mainland China**: the update check and the installer download no longer depend on reaching GitHub directly - the game now tries several community GitHub acceleration proxies usable from mainland China (ghfast.top, gh-proxy.com, ghproxy.net, gh.llkk.cc) in order, for both the update manifest and the installer download, so checking and updating keep working even when api/raw.githubusercontent.com are slow or blocked. Advanced users can point the game at their own mirror (for example a Gitee repo) via `%APPDATA%/SheriffOfNottingham/mirror.json` (`{"manifest": "...", "installer": "..."}`, both optional). Mod-market downloads use the same proxy fallback and prefer fresh GitHub sources over the stale jsDelivr cache. The update error screen now explains mainland-China GitHub restrictions and offers the manual download page. All bundled mod versions are synced with the game build (1.6.9).
 v1.6.8 expands the **Twists of Fate Event Pack** to **20 events** (added Apple Blight, Cheese Festival, Zero Tolerance, Double Compensation, Shortage, Parade Day, Bounty Board, Sheriff Payday, Rumors Pro, Royal Treasury), makes events draw randomly every round so they **never run out** and never repeat two rounds in a row, adds **6-player rooms** (lobby cap is now 2-6), fixes **Bountiful Harvest** actually granting the extra draw, fixes **Black Market auto-submit** so the final round can still claim rewards, and **color-codes chat messages** by type. All bundled mod versions are synced with the game build (1.6.8).
 
 
@@ -33,7 +34,7 @@ market.py    Mod market: remote catalog + one-click download & install
 mods_market.json  Mod market catalog (raw + jsDelivr CDN)
 mods_pack/   Packed mod zips served to the in-game market
 main.py      Entry point (--version shows the version dialog)
-version.py   __version__ = "1.6.8"
+version.py   __version__ = "1.6.9"
 installer.iss  Inno Setup script that builds the installer
 test_bot.py  Headless bot automation test (full game + reconnect)
 test_ai_bots.py  Test for in-lobby AI bots (host adds bots, plays a full game)
@@ -120,8 +121,8 @@ source) with a `mod.json` is a mod:
 
 ```python
 def register(api):
-    api.add_contraband("TEA", "Tea", "??", value=5, fine=3, cnt3=8, cnt6=12, color=(90, 160, 120))
-    api.add_legal("PEAR", "Pear", "?", value=3, fine=2, cnt3=24, cnt6=24,
+    api.add_contraband("TEA", "Tea", "茶", value=5, fine=3, cnt3=8, cnt6=12, color=(90, 160, 120))
+    api.add_legal("PEAR", "Pear", "梨", value=3, fine=2, cnt3=24, cnt6=24,
                   king_bonus=10, queen_bonus=5, color=(140, 200, 90))
     api.patch("game", "HAND_SIZE", 7)     # e.g. change the hand size rule
 ```
@@ -185,7 +186,7 @@ with Inno Setup:
 - Uninstalls cleanly from "Apps & features" (Control Panel) and removes the
   whole app folder including any mods you added.
 - Supports English and Chinese installer languages (chosen at install time).
-- Rebuild it with: `ISCC.exe installer.iss` after running `??.bat`.
+- Rebuild it with: `ISCC.exe installer.iss` (after building the exe).
 
 ## Graphics & icon (v1.2.0)
 
@@ -276,7 +277,6 @@ See the header of `sign_assets.ps1` for details.
 ## Package to exe
 
 ```
-??.bat                        # or run the command below manually
 python -m PyInstaller --clean --noconfirm SheriffOfNottingham.spec
 ```
 

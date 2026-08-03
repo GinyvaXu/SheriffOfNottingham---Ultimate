@@ -344,6 +344,7 @@ class App:
         self.update_state = "idle"
         self.update_info = None
         self.update_error = ""
+        self.update_error_hint = ""
         self.update_progress = 0.0
         self.update_installer = ""
         self.update_banner = ""
@@ -1600,11 +1601,16 @@ class App:
             return
         self.update_state = "checking"
         self.update_error = ""
+        self.update_error_hint = ""
         self.update_banner = ""
         self._update_ui_dirty = True
         threading.Thread(target=self._thread_check, daemon=True).start()
 
     def _error_text(self, code, detail=""):
+        if code in ("timeout", "network"):
+            self.update_error_hint = self._t("update_err_hint")
+        else:
+            self.update_error_hint = ""
         if code == "timeout":
             return self._t("update_err_timeout")
         if code == "network":
@@ -1722,6 +1728,12 @@ class App:
             t = get_font(22).render(self._t("update_error", e=self.update_error),
                                     True, COLOR_RED)
             self.screen.blit(t, (cx, 170))
+            if self.update_error_hint:
+                yy = 205
+                for ln in self._wrap_text(self.update_error_hint, get_font(15), 680):
+                    t2 = get_font(15).render(ln, True, COLOR_DIM)
+                    self.screen.blit(t2, (cx, yy))
+                    yy += 20
         if not updater.is_frozen():
             t = get_font(16).render(self._t("update_src_hint"), True, COLOR_DIM)
             self.screen.blit(t, (cx, 262))

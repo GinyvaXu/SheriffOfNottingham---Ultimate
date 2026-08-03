@@ -40,6 +40,7 @@ def _single_source():
         [("raw", "http://fake/manifest.json")])
     patcher.start()
     updater._MANIFEST_PATCH = patcher
+    mock.patch.object(updater, "custom_mirror", return_value={}).start()
     return patcher
 
 
@@ -94,6 +95,7 @@ class CheckTest(unittest.TestCase):
 
     def test_fallback_to_next_source(self):
         sources = [("raw", "http://fake/a.json"), ("cdn", "http://fake/b.json")]
+        mock.patch.object(updater, "custom_mirror", return_value={}).start()
         with mock.patch.object(updater, "MANIFEST_SOURCES", sources):
             man = {"version": "99.0.0", "url": "http://x/Setup.exe"}
             with mock.patch.object(updater, "fetch_manifest",
@@ -120,6 +122,7 @@ class CheckTest(unittest.TestCase):
 
     def test_release_api_fallback(self):
         api = ("api", "http://fake/api/releases/latest")
+        mock.patch.object(updater, "custom_mirror", return_value={}).start()
         with mock.patch.object(updater, "MANIFEST_SOURCES", [api]):
             payload = {
                 "tag_name": "v99.0.0",
@@ -332,6 +335,55 @@ class ManifestTest(unittest.TestCase):
         self.assertNotIn("?", zh, "notes_zh must not contain '?'")
         cjk = sum(1 for c in zh if "\u4e00" <= c <= "\u9fff")
         self.assertGreater(cjk, 200, "notes_zh must contain real Chinese text")
+
+
+class MirrorTest(unittest.TestCase):
+    def test_github_url_expands(self):
+        base = "https://github.com/a/b/releases/download/v1/Setup.exe"
+        urls = updater.mirror_urls(base)
+        self.assertEqual(urls[0], base)
+        self.assertEqual(len(urls), 1 + len(updater.GITHUB_PROXIES))
+        for prefix, u in zip(updater.GITHUB_PROXIES, urls[1:]):
+            self.assertTrue(u.startswith(prefix), u)
+            self.assertTrue(u.endswith(base), u)
+
+    def test_non_github_unchanged(self):
+        self.assertEqual(updater.mirror_urls("https://cdn.example.com/x.zip"),
+                         ["https://cdn.example.com/x.zip"])
+        self.assertEqual(updater.mirror_urls(""), [])
+
+    def test_custom_manifest_tried_first(self):
+        with mock.patch.object(updater, "custom_mirror",
+                               return_value={"manifest": "http://mirror/man.json"}):
+            man = {"version": "99.0.0", "url": "http://x/Setup.exe"}
+            seen = []
+
+            def fake_fetch(url, timeout):
+                seen.append(url)
+                if url == "http://mirror/man.json":
+                    return man
+                raise OSError("unused")
+
+            with mock.patch.object(updater, "fetch_manifest", side_effect=fake_fetch):
+                r = updater.check_for_update()
+        self.assertTrue(r["available"])
+        self.assertEqual(seen, ["http://mirror/man.json"])
+        self.assertIsNone(r["error"])
+
+    def test_custom_installer_used(self):
+        data = b"fake"
+        def fake_open(req, timeout=None):
+            return FakeResponse(data, headers={"Content-Length": str(len(data))})
+        with mock.patch.object(updater, "custom_mirror",
+                               return_value={"installer": "http://mirror/Setup.exe"}):
+            with mock.patch.object(updater.urllib.request, "urlopen",
+                                   side_effect=fake_open):
+                with tempfile.TemporaryDirectory() as d:
+                    path = updater.download_installer(
+                        "http://github.com/x/Setup.exe", dest_dir=d)
+                    self.assertEqual(os.path.basename(path), "Setup.exe")
+                    with open(path, "rb") as f:
+                        self.assertEqual(f.read(), data)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
   "id": "spice_road",
   "name": "Spice Road",
   "name_zh": "香料之路",
-  "version": "1.6.8",
+  "version": "1.6.9",
   "description": "Rule mod: adds a new legal goods (Pepper) and a new contraband (Tea).",
   "description_zh": "新增合法货物胡椒与违禁品茶叶，拓展贸易与走私路线。",
   "category": "rules",
