@@ -66,6 +66,24 @@ _CANVAS_MOUSE = (0, 0)
 
 SPONSOR_URL = "https://www.ifdian.net/a/Ginyva?utm_source=copylink&utm_medium=link"
 
+
+def _smooth_to(src, size, dest):
+    """smoothscale into a cached destination surface (fallback for old pygame)."""
+    try:
+        pygame.transform.smoothscale(src, size, dest)
+        return dest
+    except (TypeError, ValueError):
+        return pygame.transform.smoothscale(src, size)
+
+# Black-market quest panel geometry. The interactive submit buttons are
+# created in _rebuild_game_ui with these same constants, so they always line
+# up with the rows drawn by _draw_black_market / _draw_bm_row.
+_BM_X, _BM_Y, _BM_W = 20, 268, 860
+_BM_HEADER, _BM_ROW = 36, 46
+_BM_CHIP = 104
+_BM_SLOT_W = 304
+_BM_SUBMIT_X = _BM_X + 12 + _BM_CHIP + 8 + _BM_SLOT_W * 2 + 10 * 2
+
 _FONT_CACHE = {}
 _SYS_FONT_PATHS = [
     r"C:\Windows\Fonts\msyh.ttc",       # Microsoft YaHei
@@ -160,54 +178,90 @@ class Button:
         self.value = value    # big number near the top (card value)
         self.sub = sub        # small bottom hint (fine / contraband tag)
         self.icon = icon      # optional surface drawn instead of text
+        self.down = False
+        self._hover = 0.0
+        self._flash_at = 0
 
     def handle(self, ev):
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             if self.enabled and self.rect.collidepoint(ev.pos):
+                self.down = True
+                return False
+        elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
+            was = self.down
+            self.down = False
+            if was and self.enabled and self.rect.collidepoint(ev.pos):
+                self._flash_at = pygame.time.get_ticks()
                 if self.cb:
                     self.cb()
                 return True
         return False
 
+    def _hover_amount(self):
+        """Smoothed hover amount 0..1 so color changes glide instead of snap."""
+        target = 1.0 if (self.enabled and self.rect.collidepoint(_CANVAS_MOUSE)) else 0.0
+        self._hover += (target - self._hover) * 0.4
+        if abs(self._hover - target) < 0.02:
+            self._hover = target
+        return self._hover
+
     def draw(self, surf):
-        hover = self.enabled and self.rect.collidepoint(_CANVAS_MOUSE)
+        h = self._hover_amount()
+        down = self.down and self.enabled
+        rect = self.rect.move(0, 2) if down else self.rect
         if self.bg is not None:
-            if hover and self.enabled:
-                color = tuple(min(255, c + 26) for c in self.bg)
-            elif not self.enabled:
+            if not self.enabled:
                 color = tuple(max(40, c - 30) for c in self.bg)
             else:
-                color = self.bg
+                lit = tuple(min(255, c + 30) for c in self.bg)
+                color = tuple(int(a + (b - a) * h) for a, b in zip(self.bg, lit))
         else:
-            color = COLOR_BTN_HOVER if (hover and self.enabled) else (COLOR_BTN if self.enabled else COLOR_BTN_DIS)
-        pygame.draw.rect(surf, color, self.rect, border_radius=6)
+            if not self.enabled:
+                color = COLOR_BTN_DIS
+            else:
+                base = COLOR_BTN
+                lit = COLOR_BTN_HOVER
+                color = tuple(int(a + (b - a) * h) for a, b in zip(base, lit))
+        if down:
+            color = tuple(max(20, c - 14) for c in color)
+        pygame.draw.rect(surf, color, rect, border_radius=6)
         if self.highlight:
-            pygame.draw.rect(surf, COLOR_SELECT, self.rect.inflate(10, 10), 4, border_radius=11)
+            pygame.draw.rect(surf, COLOR_SELECT, rect.inflate(10, 10), 4, border_radius=11)
         if self.border is not None:
-            pygame.draw.rect(surf, self.border, self.rect, 3, border_radius=6)
+            pygame.draw.rect(surf, self.border, rect, 3, border_radius=6)
         else:
-            pygame.draw.rect(surf, (30, 24, 18), self.rect, 1, border_radius=6)
+            pygame.draw.rect(surf, (30, 24, 18), rect, 1, border_radius=6)
         if self.border == COLOR_BORDER_ROYAL:
-            pygame.draw.rect(surf, COLOR_BORDER_ROYAL, self.rect.inflate(-8, -8), 1, border_radius=5)
+            pygame.draw.rect(surf, COLOR_BORDER_ROYAL, rect.inflate(-8, -8), 1, border_radius=5)
         txt = COLOR_TEXT if self.enabled else COLOR_DIM
-        cy = self.rect.centery
+        cy = rect.centery
         if self.value is not None:
             t = render_outlined(get_font(26), str(self.value), txt)
-            surf.blit(t, t.get_rect(center=(self.rect.centerx, self.rect.y + 32)))
+            surf.blit(t, t.get_rect(center=(rect.centerx, rect.y + 32)))
             cy += 16
         t = render_outlined(get_font(17), self.text, txt)
-        surf.blit(t, t.get_rect(center=(self.rect.centerx, cy)))
+        surf.blit(t, t.get_rect(center=(rect.centerx, cy)))
         if self.sub:
             t = render_outlined(get_font(13), self.sub, COLOR_DIM)
-            surf.blit(t, t.get_rect(center=(self.rect.centerx, self.rect.bottom - 12)))
+            surf.blit(t, t.get_rect(center=(rect.centerx, rect.bottom - 12)))
         if self.icon is not None:
             ic = self.icon
-            if ic.get_width() > self.rect.width - 8 or ic.get_height() > self.rect.height - 8:
-                scale = min((self.rect.width - 8) / ic.get_width(),
-                            (self.rect.height - 8) / ic.get_height())
+            if ic.get_width() > rect.width - 8 or ic.get_height() > rect.height - 8:
+                scale = min((rect.width - 8) / ic.get_width(),
+                            (rect.height - 8) / ic.get_height())
                 ic = pygame.transform.smoothscale(ic, (int(ic.get_width() * scale),
                                                        int(ic.get_height() * scale)))
-            surf.blit(ic, ic.get_rect(center=self.rect.center))
+            surf.blit(ic, ic.get_rect(center=rect.center))
+        # Click flash: a soft white ring that fades out over ~180 ms.
+        if self._flash_at:
+            f = 1.0 - (pygame.time.get_ticks() - self._flash_at) / 180.0
+            if f <= 0:
+                self._flash_at = 0
+            else:
+                ring = pygame.Surface(rect.size, pygame.SRCALPHA)
+                pygame.draw.rect(ring, (255, 255, 255, int(130 * f)),
+                                 ring.get_rect(), 3, border_radius=9)
+                surf.blit(ring, rect)
 
 
 class TextInput:
@@ -303,6 +357,8 @@ class App:
         self._last_drawn_screen = None
         self._fade_t = 0.0
         self._history_recorded = False
+        self._win_pending = None
+        self.settings_note_msg = ""
         self.view = None
         self.lobby = None
         self.lobby_rules_mods = []
@@ -499,10 +555,14 @@ class App:
         """(Re)create the real window from profile settings.
 
         The GUI is drawn on a fixed 1280x800 logical canvas (``self.screen``)
-        which is scaled onto the real window (``self.window``) with black
-        letterbox bars, so every screen benefits from a bigger window.
+        which is scaled onto the real window (``self.window``). ``stretch``
+        fills the window edge-to-edge (no black bars, slight distortion);
+        otherwise the canvas is scaled to fit with letterbox bars. The final
+        up/downscale uses smooth (bilinear) resampling for clean edges, and
+        the scaled frame is cached in ``self._present``.
         """
         p = self.profile
+        mode = p.get("display", "window")
         try:
             w = max(profile.WIN_MIN[0], min(profile.WIN_MAX[0],
                                             int(p.get("win_w") or W)))
@@ -511,7 +571,7 @@ class App:
         except (TypeError, ValueError):
             w, h = W, H
         flags = 0
-        if p.get("fullscreen"):
+        if mode == "fullscreen":
             flags |= pygame.FULLSCREEN
             try:
                 info = pygame.display.Info()
@@ -519,56 +579,102 @@ class App:
                     w, h = info.current_w, info.current_h
             except Exception:  # noqa: BLE001
                 pass
-        if p.get("borderless"):
+        elif mode == "borderless":
             flags |= pygame.NOFRAME
         self.window = pygame.display.set_mode((w, h), flags)
         self.win_w, self.win_h = self.window.get_size()
-        self.scale = min(self.win_w / W, self.win_h / H)
-        self.offset_x = int((self.win_w - W * self.scale) / 2)
-        self.offset_y = int((self.win_h - H * self.scale) / 2)
+        self.stretch = bool(p.get("stretch"))
+        sx, sy = self.win_w / W, self.win_h / H
+        if self.stretch:
+            self.scale_x, self.scale_y = sx, sy
+            self.scale = min(sx, sy)
+            self.offset_x = self.offset_y = 0
+        else:
+            self.scale = min(sx, sy)
+            self.scale_x = self.scale_y = self.scale
+            self.offset_x = int((self.win_w - W * self.scale) / 2)
+            self.offset_y = int((self.win_h - H * self.scale) / 2)
         self.screen = pygame.Surface((W, H))
+        self._fade_ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        pw = self.win_w if self.stretch else max(1, int(W * self.scale))
+        ph = self.win_h if self.stretch else max(1, int(H * self.scale))
+        self._present = pygame.Surface((pw, ph))
         return True
 
     def _to_canvas(self, pos):
         """Map a real-window mouse position to logical canvas coordinates."""
         try:
-            return (int((pos[0] - self.offset_x) / self.scale),
-                    int((pos[1] - self.offset_y) / self.scale))
+            return (int((pos[0] - self.offset_x) / self.scale_x),
+                    int((pos[1] - self.offset_y) / self.scale_y))
         except (ZeroDivisionError, TypeError, ValueError):
             return (int(pos[0]), int(pos[1]))
 
     def _mouse(self):
         return self._to_canvas(pygame.mouse.get_pos())
 
+    # ---------- Settings helpers (pending changes + apply) ----------
+
+    def _win_cur(self):
+        p = self.profile
+        return {"w": int(p.get("win_w") or W), "h": int(p.get("win_h") or H),
+                "display": p.get("display", "window"),
+                "stretch": bool(p.get("stretch"))}
+
+    def _win_pending_or_cur(self):
+        cur = self._win_cur()
+        if self._win_pending:
+            cur.update(self._win_pending)
+        return cur
+
+    def _set_pending_preset(self, w, h):
+        self._win_pending = dict(self._win_pending or {})
+        self._win_pending["w"], self._win_pending["h"] = w, h
+        self.settings_w_input.text = str(w)
+        self.settings_h_input.text = str(h)
+        self.settings_note_msg = ""
+        self._rebuild_settings_ui()
+
+    def _set_pending_display(self, mode):
+        self._win_pending = dict(self._win_pending or {})
+        self._win_pending["display"] = mode
+        self.settings_note_msg = ""
+        self._rebuild_settings_ui()
+
+    def _set_pending_stretch(self, on):
+        self._win_pending = dict(self._win_pending or {})
+        self._win_pending["stretch"] = on
+        self.settings_note_msg = ""
+        self._rebuild_settings_ui()
+
+    def _restore_window_defaults(self):
+        w, h = profile.PRESET_SIZES[0]
+        self._win_pending = {"w": w, "h": h, "display": "window", "stretch": False}
+        self.settings_w_input.text = str(w)
+        self.settings_h_input.text = str(h)
+        self.settings_note_msg = ""
+        self._rebuild_settings_ui()
+
     def _apply_window_settings(self):
-        """Read the custom W/H inputs, save, and recreate the window."""
+        """Validate the custom size inputs, save, and recreate the window."""
         try:
             w = max(profile.WIN_MIN[0], min(profile.WIN_MAX[0],
                                             int(self.settings_w_input.text.strip() or 0)))
             h = max(profile.WIN_MIN[1], min(profile.WIN_MAX[1],
                                             int(self.settings_h_input.text.strip() or 0)))
         except ValueError:
-            w, h = self.profile.get("win_w", W), self.profile.get("win_h", H)
-        self.profile["win_w"], self.profile["win_h"] = w, h
-        self.profile["fullscreen"] = bool(self.profile.get("fullscreen"))
-        self.profile["borderless"] = bool(self.profile.get("borderless"))
-        profile.save_profile(self.profile)
-        self.settings_w_input.text = str(w)
-        self.settings_h_input.text = str(h)
+            self.settings_note_msg = self._t("settings_bad_number")
+            return
+        p = self.profile
+        pnd = self._win_pending or {}
+        p["win_w"], p["win_h"] = w, h
+        p["display"] = pnd.get("display", p.get("display", "window"))
+        p["stretch"] = bool(pnd.get("stretch", p.get("stretch", False)))
+        p["fullscreen"] = p["display"] == "fullscreen"
+        p["borderless"] = p["display"] == "borderless"
+        profile.save_profile(p)
+        self._win_pending = {}
         self._apply_window_mode()
-        self.menu_note = self._t("settings_applied")
-        self._rebuild_settings_ui()
-
-    def _set_window_size(self, w, h):
-        self.profile["win_w"], self.profile["win_h"] = w, h
-        self._rebuild_settings_ui()
-
-    def _toggle_fullscreen(self):
-        self.profile["fullscreen"] = not self.profile.get("fullscreen")
-        self._rebuild_settings_ui()
-
-    def _toggle_borderless(self):
-        self.profile["borderless"] = not self.profile.get("borderless")
+        self.settings_note_msg = self._t("settings_applied")
         self._rebuild_settings_ui()
 
     # ---------- Room ----------
@@ -1344,14 +1450,14 @@ class App:
                 if c.get("type") in types:
                     mine[c["type"]] = mine.get(c["type"], 0) + 1
             for i, t_ in enumerate(types):
-                ry = 292 + i * 44
-                for slot in range(claimed.get(t_, 0), 2):
-                    can = (slot == claimed.get(t_, 0) and (mine.get(t_, 0) or 0) >= need)
-                    self.buttons.append(Button(
-                        (250 + slot * 280, ry, 96, 22),
-                        self._t("bm_submit"),
-                        lambda t_=t_, slot=slot: self._bm_submit(t_, slot),
-                        enabled=can))
+                ry = _BM_Y + _BM_HEADER + i * _BM_ROW
+                slot = claimed.get(t_, 0)
+                can = (slot < 2 and (mine.get(t_, 0) or 0) >= need)
+                self.buttons.append(Button(
+                    (_BM_SUBMIT_X, ry + 8, 96, 30),
+                    self._t("bm_submit"),
+                    lambda t_=t_, slot=slot: self._bm_submit(t_, slot),
+                    enabled=can))
         if self.is_host and not self.disconnected:
             self.buttons.append(Button((W - 170, 8, 160, 40), self._t("btn_close_room"),
                                        lambda: self._send({"t": "host_quit"})))
@@ -1454,49 +1560,76 @@ class App:
 
     def _rebuild_settings_ui(self):
         self.buttons = []
-        p = self.profile
+        cur = self._win_pending_or_cur()
+        # Resolution presets (left panel)
         for i, (w, h) in enumerate(profile.PRESET_SIZES):
             x = 120 + (i % 2) * 200
-            y = 216 + (i // 2) * 58
-            active = (int(p.get("win_w") or 0) == w and int(p.get("win_h") or 0) == h
-                      and not p.get("fullscreen"))
-            self.buttons.append(Button((x, y, 186, 46),
+            y = 228 + (i // 2) * 56
+            active = (cur["w"] == w and cur["h"] == h and cur["display"] == "window")
+            self.buttons.append(Button((x, y, 186, 44),
                                        self._t("settings_w_h", w=w, h=h),
-                                       lambda w=w, h=h: self._set_window_size(w, h),
+                                       lambda w=w, h=h: self._set_pending_preset(w, h),
                                        highlight=active))
-        fs = self._t("settings_on" if p.get("fullscreen") else "settings_off")
-        bl = self._t("settings_on" if p.get("borderless") else "settings_off")
-        self.buttons.append(Button((120, 362, 386, 46),
-                                   self._t("settings_fullscreen", s=fs),
-                                   self._toggle_fullscreen, highlight=p.get("fullscreen")))
-        self.buttons.append(Button((120, 418, 386, 46),
-                                   self._t("settings_borderless", s=bl),
-                                   self._toggle_borderless, highlight=p.get("borderless")))
-        self.buttons.append(Button((120, 500, 240, 46), self._t("settings_apply"),
+        # Display mode (right panel)
+        modes = [("window", "settings_display_window"),
+                 ("borderless", "settings_display_borderless"),
+                 ("fullscreen", "settings_display_fullscreen")]
+        for i, (mode, key) in enumerate(modes):
+            self.buttons.append(Button((690, 228 + i * 58, 220, 44), self._t(key),
+                                       lambda m=mode: self._set_pending_display(m),
+                                       highlight=cur["display"] == mode))
+        # Screen fit (right panel)
+        self.buttons.append(Button((690, 420, 220, 44), self._t("settings_fit"),
+                                   lambda: self._set_pending_stretch(False),
+                                   highlight=not cur["stretch"]))
+        self.buttons.append(Button((690, 476, 220, 44), self._t("settings_stretch"),
+                                   lambda: self._set_pending_stretch(True),
+                                   highlight=cur["stretch"]))
+        # Bottom actions
+        self.buttons.append(Button((120, 584, 140, 44), self._t("settings_apply"),
                                    self._apply_window_settings))
+        self.buttons.append(Button((280, 584, 200, 44), self._t("settings_restore"),
+                                   self._restore_window_defaults))
         self.buttons.append(Button((W - 180, 700, 150, 44), self._t("btn_back"),
                                    self._back_to_menu))
 
     def _draw_settings(self):
         self._screen_header(self._t("settings_title"))
-        self._panel(self.screen, (90, 140, 470, 430), self._t("settings_window"))
-        t = get_font(17).render(self._t("settings_size_preset"), True, COLOR_ACCENT)
+        cur = self._win_pending_or_cur()
+        # Left panel: resolution
+        self._panel(self.screen, (90, 140, 420, 500), self._t("settings_resolution"))
+        t = get_font(17).render(self._t("settings_presets"), True, COLOR_ACCENT)
         self.screen.blit(t, (120, 186))
         t = get_font(17).render(self._t("settings_custom"), True, COLOR_ACCENT)
-        self.screen.blit(t, (120, 290))
+        self.screen.blit(t, (120, 356))
         t = get_font(15).render("W:", True, COLOR_TEXT)
-        self.screen.blit(t, (440, 300))
+        self.screen.blit(t, (126, 386))
         t = get_font(15).render("H:", True, COLOR_TEXT)
-        self.screen.blit(t, (590, 300))
-        self.settings_w_input.rect = pygame.Rect(470, 318, 120, 34)
-        self.settings_h_input.rect = pygame.Rect(610, 318, 120, 34)
+        self.screen.blit(t, (286, 386))
+        self.settings_w_input.rect = pygame.Rect(152, 382, 120, 34)
+        self.settings_h_input.rect = pygame.Rect(312, 382, 120, 34)
         self.settings_w_input.draw(self.screen)
         self.settings_h_input.draw(self.screen)
-        t = get_font(15).render(self._t("settings_note"), True, COLOR_DIM)
-        self.screen.blit(t, (120, 560))
-        if self.menu_note:
-            t = get_font(16).render(self.menu_note, True, COLOR_GREEN)
-            self.screen.blit(t, (120, 600))
+        t = get_font(13).render(self._t("settings_range"), True, COLOR_DIM)
+        self.screen.blit(t, (120, 428))
+        # Right panel: display mode + fit
+        self._panel(self.screen, (660, 140, 530, 500), self._t("settings_display"))
+        t = get_font(17).render(self._t("settings_display"), True, COLOR_ACCENT)
+        self.screen.blit(t, (690, 186))
+        t = get_font(17).render(self._t("settings_aspect"), True, COLOR_ACCENT)
+        self.screen.blit(t, (690, 380))
+        t = get_font(13).render(self._t("settings_note"), True, COLOR_DIM)
+        self.screen.blit(t, (690, 540))
+        t = get_font(15).render(self._t("settings_current",
+                                         w=self.win_w, h=self.win_h), True, COLOR_DIM)
+        self.screen.blit(t, (120, 470))
+        # Status line
+        if self.settings_note_msg:
+            t = get_font(16).render(self.settings_note_msg, True, COLOR_GREEN)
+            self.screen.blit(t, (120, 650))
+        elif self._win_pending:
+            t = get_font(16).render(self._t("settings_pending"), True, COLOR_GOLD)
+            self.screen.blit(t, (120, 650))
         for b in self.buttons:
             b.draw(self.screen)
 
@@ -1828,6 +1961,8 @@ class App:
         self.screen_name = "settings"
         self.settings_w_input.text = str(self.profile.get("win_w", W))
         self.settings_h_input.text = str(self.profile.get("win_h", H))
+        self._win_pending = {}
+        self.settings_note_msg = ""
         self._rebuild_settings_ui()
 
     def _open_history(self):
@@ -2045,20 +2180,31 @@ class App:
             self._draw_game()
         elif self.screen_name == "over":
             self._draw_over()
-        # Screen-change animation: fade in from black (~0.3s).
+        # Screen-change animation: quick fade in from black (~0.2s). The
+        # overlay surface is reused every frame (no per-frame allocation).
         if self._fade_t is not None:
             if self._fade_t >= 1.0:
                 self._fade_t = None
             else:
-                self._fade_t = min(1.0, self._fade_t + 0.06)
-                ov = pygame.Surface((W, H), pygame.SRCALPHA)
-                ov.fill((0, 0, 0, int(255 * (1.0 - self._fade_t))))
-                self.screen.blit(ov, (0, 0))
-        # Scale the logical canvas onto the real window (letterboxed).
-        self.window.fill((0, 0, 0))
-        scaled = pygame.transform.scale(
-            self.screen, (max(1, int(W * self.scale)), max(1, int(H * self.scale))))
-        self.window.blit(scaled, (self.offset_x, self.offset_y))
+                self._fade_t = min(1.0, self._fade_t + 0.09)
+                a = int(255 * (1.0 - self._fade_t))
+                if a > 0:
+                    ov = self._fade_ov
+                    ov.fill((0, 0, 0, a))
+                    self.screen.blit(ov, (0, 0))
+        # Present the logical canvas onto the real window. Smooth (bilinear)
+        # resampling keeps edges clean; the scaled frame is cached.
+        if self.stretch:
+            self._present = _smooth_to(self.screen, (self.win_w, self.win_h),
+                                       self._present)
+            self.window.blit(self._present, (0, 0))
+        elif self.win_w == W and self.win_h == H:
+            self.window.blit(self.screen, (0, 0))
+        else:
+            self.window.fill((0, 0, 0))
+            self._present = _smooth_to(self.screen, self._present.get_size(),
+                                       self._present)
+            self.window.blit(self._present, (self.offset_x, self.offset_y))
 
     def _draw_menu(self):
         title = get_font(46).render(self._t("title"), True, COLOR_ACCENT)
@@ -2595,7 +2741,7 @@ class App:
 
     def _bm_panel_h(self, n_types):
         """Height of the black-market quest panel for n quest groups."""
-        return 36 + max(0, n_types) * 46
+        return _BM_HEADER + max(0, n_types) * _BM_ROW
 
     def _draw_black_market(self):
         v = self.view or {}
@@ -2610,37 +2756,38 @@ class App:
         claimed = bm.get("claimed") or {}
         claimers = bm.get("claimers") or {}
         hgt = self._bm_panel_h(len(types))
-        px, py = 20, 268
-        pygame.draw.rect(self.screen, (54, 44, 32), (px, py, 860, hgt),
+        px, py = _BM_X, _BM_Y
+        pygame.draw.rect(self.screen, (54, 44, 32), (px, py, _BM_W, hgt),
                          border_radius=10)
-        pygame.draw.rect(self.screen, COLOR_BORDER_ROYAL, (px, py, 860, hgt),
+        pygame.draw.rect(self.screen, COLOR_BORDER_ROYAL, (px, py, _BM_W, hgt),
                          2, border_radius=10)
         self.screen.blit(gfx.coin(18), (px + 12, py + 8))
         _out_blit(self.screen, get_font(16),
                   self._t("bm_title") + "    " + self._t("bm_need_hint", n=need),
                   COLOR_ACCENT, (px + 36, py + 7))
-        y = py + 36
+        y = py + _BM_HEADER
         for t_ in types:
             self._draw_bm_row(y, t_, rewards.get(t_, [0, 0]) or [0, 0],
                               claimed.get(t_, 0),
                               claimers.get(t_, [None, None]) or [None, None])
             # Progress stays secret: nobody sees who is close to a quest.
-            y += 46
+            y += _BM_ROW
 
     def _draw_bm_row(self, y, type_key, rw, claimed_count, cl):
-        """One black-market task row: a colored goods chip + two reward slots."""
-        px, pw = 20, 860
+        """One black-market task row: goods chip + two reward slots. The right
+        side (``_BM_SUBMIT_X``) is reserved for the interactive Submit button
+        drawn on top by the regular button loop."""
+        px = _BM_X
         col = TYPE_COLOR.get(type_key, COLOR_TEXT)
-        chip = pygame.Rect(px + 12, y + 5, 104, 36)
+        chip = pygame.Rect(px + 12, y + 5, _BM_CHIP, 36)
         dark = tuple(max(18, c - 70) for c in col)
         pygame.draw.rect(self.screen, dark, chip, border_radius=8)
         pygame.draw.rect(self.screen, col, chip, 2, border_radius=8)
         _out_blit(self.screen, get_font(15), self._tn(type_key), (255, 250, 235),
                   (chip.x + 10, chip.y + 9))
-        slot_w = (pw - 124 - 30) // 2
         for si in range(2):
-            sx = px + 124 + si * (slot_w + 10)
-            slot = pygame.Rect(sx, y + 2, slot_w, 42)
+            sx = px + 124 + si * (_BM_SLOT_W + 10)
+            slot = pygame.Rect(sx, y + 2, _BM_SLOT_W, 42)
             done = si < claimed_count and cl[si]
             if done:
                 fill, border = (50, 96, 58), COLOR_GREEN

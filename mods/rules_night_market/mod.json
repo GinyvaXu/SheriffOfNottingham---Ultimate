@@ -2,7 +2,7 @@
   "id": "night_market",
   "name": "Night Market Timer",
   "name_zh": "夜市场时限",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Adds a 40-second action timer to every phase; on timeout the server auto-plays a sensible default action. Faster games, no more waiting forever.",
   "description_zh": "每个阶段施加 40 秒动作倒计时，超时由服务器自动执行合理默认动作，加快节奏。",
   "category": "rules",

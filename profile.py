@@ -45,6 +45,7 @@ def profile_path():
 def default_profile():
     return {"name": "", "avatar": DEFAULT_AVATAR, "custom_avatar": None,
             "win_w": PRESET_SIZES[0][0], "win_h": PRESET_SIZES[0][1],
+            "display": "window", "stretch": False,
             "fullscreen": False, "borderless": False}
 
 
@@ -69,8 +70,20 @@ def load_profile():
             w = h = 0
         p["win_w"] = max(WIN_MIN[0], min(WIN_MAX[0], w or PRESET_SIZES[0][0]))
         p["win_h"] = max(WIN_MIN[1], min(WIN_MAX[1], h or PRESET_SIZES[0][1]))
-        p["fullscreen"] = bool(data.get("fullscreen"))
-        p["borderless"] = bool(data.get("borderless"))
+        # Display mode: "window" | "borderless" | "fullscreen" (migrates old
+        # boolean fullscreen/borderless profiles automatically).
+        disp = data.get("display")
+        if disp not in ("window", "fullscreen", "borderless"):
+            if data.get("fullscreen"):
+                disp = "borderless" if data.get("borderless") else "fullscreen"
+            elif data.get("borderless"):
+                disp = "borderless"
+            else:
+                disp = "window"
+        p["display"] = disp
+        p["stretch"] = bool(data.get("stretch"))
+        p["fullscreen"] = disp == "fullscreen"
+        p["borderless"] = disp == "borderless"
     except (OSError, ValueError):
         pass
     return p
