@@ -75,13 +75,38 @@ def _smooth_to(src, size, dest):
     except (TypeError, ValueError):
         return pygame.transform.smoothscale(src, size)
 
+# --- In-game screen layout (logical canvas 1280x800) -------------------
+# The game screen is split into fixed, non-overlapping zones so nothing
+# drifts: a full-width top bar (title/deck/chips), a full-width player
+# strip, the black-market panel, the "your table" info line, the hand-card
+# row, the instruction line and the action-button row. The right column is
+# the chat panel. App._game_layout() computes every zone once per UI
+# rebuild (single source of truth) and _draw_game / _rebuild_game_ui /
+# _draw_black_market all read from it, so widgets and artwork always line up.
+_G_MAIN_L = 16            # left edge of the main column
+_G_MAIN_R = 896           # right edge of the main column (chat starts here)
+_G_TOP_H = 64             # top bar height (0..64)
+_G_PLAY_TOP = 70          # player strip top
+_G_PLAY_H = 160           # player panel height (one row for every player count)
+_G_PLAY_GAP = 8
+_G_BM_TOP = 240           # black-market panel top
+_G_BAG_Y = 424            # "your table" info line top
+_G_HAND_Y = 452           # hand-card row top
+_G_HAND_W, _G_HAND_H = 116, 120
+_G_HAND_GAP = 8
+_G_INSTR_Y = 586          # instruction / waiting line
+_G_ACT_Y = 614            # action-button row top
+_G_CHAT_X = 904           # chat panel left
+_G_CHAT_W = 372
+_G_CHAT_TOP = 68          # chat panel top (aligns with the player strip)
+
 # Black-market quest panel geometry. The interactive submit buttons are
 # created in _rebuild_game_ui with these same constants, so they always line
 # up with the rows drawn by _draw_black_market / _draw_bm_row.
-_BM_X, _BM_Y, _BM_W = 20, 268, 860
+_BM_X, _BM_W = _G_MAIN_L, _G_MAIN_R - _G_MAIN_L
 _BM_HEADER, _BM_ROW = 36, 46
-_BM_CHIP = 104
-_BM_SLOT_W = 304
+_BM_CHIP = 96
+_BM_SLOT_W = 308
 _BM_SUBMIT_X = _BM_X + 12 + _BM_CHIP + 8 + _BM_SLOT_W * 2 + 10 * 2
 
 _FONT_CACHE = {}
@@ -167,7 +192,7 @@ def _out_blit(surf, font, text, color, pos, outline=_TEXT_OUTLINE, width=2):
 
 class Button:
     def __init__(self, rect, text, cb=None, enabled=True, highlight=False,
-                 bg=None, border=None, value=None, sub=None, icon=None):
+                 bg=None, border=None, value=None, sub=None, icon=None, fs=None):
         self.rect = pygame.Rect(rect)
         self.text = text
         self.cb = cb
@@ -178,6 +203,7 @@ class Button:
         self.value = value    # big number near the top (card value)
         self.sub = sub        # small bottom hint (fine / contraband tag)
         self.icon = icon      # optional surface drawn instead of text
+        self.fs = fs          # optional text size override (default 17)
         self.down = False
         self._hover = 0.0
         self._flash_at = 0
@@ -239,7 +265,7 @@ class Button:
             t = render_outlined(get_font(26), str(self.value), txt)
             surf.blit(t, t.get_rect(center=(rect.centerx, rect.y + 32)))
             cy += 16
-        t = render_outlined(get_font(17), self.text, txt)
+        t = render_outlined(get_font(self.fs or 17), self.text, txt)
         surf.blit(t, t.get_rect(center=(rect.centerx, cy)))
         if self.sub:
             t = render_outlined(get_font(13), self.sub, COLOR_DIM)
@@ -383,6 +409,20 @@ class App:
         self.mods_row_buttons = []
         self.market_row_buttons = []
         self.chat_log = []
+        self.chat_version = 0
+        self.ui_version = 0
+        self._present_valid = False
+        self._last_canvas_mouse = None
+        self._last_chat_version_drawn = -1
+        self._last_ui_version_drawn = -1
+        self._last_btn_ids = (None, None)
+        self._last_scrolls = {}
+        self._last_update_progress = -1.0
+        self._chat_lines = []
+        self._chat_lines_version = -1
+        self._wrap_cache_key = None
+        self._wrap_cache_lines = []
+        self._decor_badges = None
         self.banners = []
         self.selected = set()
         self.decl_type = None
@@ -487,6 +527,7 @@ class App:
     def _append_chat(self, text, color=None):
         self.chat_log.append((text, color))
         self.chat_log = self.chat_log[-80:]
+        self.chat_version += 1
 
     def _send(self, obj):
         if self.client:
@@ -599,6 +640,7 @@ class App:
         pw = self.win_w if self.stretch else max(1, int(W * self.scale))
         ph = self.win_h if self.stretch else max(1, int(H * self.scale))
         self._present = pygame.Surface((pw, ph))
+        self._present_valid = False
         return True
 
     def _to_canvas(self, pos):
@@ -814,7 +856,7 @@ class App:
                 # so fractional touchpad deltas cannot corrupt drawing.
                 self.chat_scroll = max(0, int(self.chat_scroll) + int(ev.y))
             if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                body = pygame.Rect(890, 96, 372, 622)
+                body = getattr(self, "chat_body_rect", None) or pygame.Rect(890, 96, 372, 622)
                 bar = pygame.Rect(body.right - 18, body.y, 18, body.height)
                 if bar.collidepoint(ev.pos) and self.chat_max_scroll > 0:
                     thumb = self.chat_thumb
@@ -833,7 +875,7 @@ class App:
                         else:
                             self.chat_scroll = max(0, self.chat_scroll - 8)
             elif ev.type == pygame.MOUSEMOTION and self.chat_drag:
-                body = pygame.Rect(890, 96, 372, 622)
+                body = getattr(self, "chat_body_rect", None) or pygame.Rect(890, 96, 372, 622)
                 thumb = self.chat_thumb
                 if thumb is not None and thumb.height > 0:
                     new_y = ev.pos[1] - self.chat_drag_offset
@@ -867,6 +909,7 @@ class App:
         if not self.client:
             return
         for m in self.client.poll():
+            self.ui_version += 1
             t = m.get("t")
             if t == "welcome":
                 self.my_seat = m.get("seat")
@@ -980,16 +1023,23 @@ class App:
             surf.blit(t, (rect.x + 16, rect.y + 10))
 
     def _decor_bg(self):
-        """Shared background for menu-like screens (game screen draws its own)."""
+        """Shared background for menu-like screens (game screen draws its own).
+
+        The badge decorations are cached once (they never change), so menu
+        screens only pay the cheap fill + blit cost every frame.
+        """
         self.screen.fill(COLOR_BG)
         pygame.draw.rect(self.screen, (48, 41, 33), (0, 0, W, 10))
         pygame.draw.rect(self.screen, (48, 41, 33), (0, H - 10, W, 10))
         try:
-            b1 = gfx.badge(150).copy()
-            b1.set_alpha(13)
+            if self._decor_badges is None:
+                b1 = gfx.badge(150).copy()
+                b1.set_alpha(13)
+                b2 = gfx.badge(200).copy()
+                b2.set_alpha(9)
+                self._decor_badges = (b1, b2)
+            b1, b2 = self._decor_badges
             self.screen.blit(b1, (36, 36))
-            b2 = gfx.badge(200).copy()
-            b2.set_alpha(9)
             self.screen.blit(b2, (W - 230, H - 230))
         except Exception:  # noqa: BLE001 - decoration only
             pass
@@ -1331,20 +1381,155 @@ class App:
         if bots:
             self._send({"t": "remove_bot", "seat": bots[-1]["seat"]})
 
+    def _stall_line_count(self, p, font_size, max_w):
+        """How many wrapped lines the stall needs at the given panel width
+        (mirrors _draw_stall_colored so the adaptive panel height is exact)."""
+        font = get_font(font_size)
+        px = font.render(self._t("stall"), True, COLOR_DIM).get_width()
+        lines = 1
+        for k, cnt in (p.get("stand_legal") or {}).items():
+            part_w = font.render(f"{self._tn(k)}x{cnt} ", True,
+                                 TYPE_COLOR.get(k, COLOR_TEXT)).get_width()
+            if px + part_w > max_w:
+                lines += 1
+                px = 0
+            px += part_w
+        for rt in (p.get("stand_royal") or []):
+            rd = game.ROYAL_GOODS.get(rt)
+            if not rd:
+                continue
+            part_w = font.render(f"{self._tn(rt)}(={rd['equals']}{self._tn(rd['of'])}) ",
+                                 True, TYPE_COLOR.get(rd["of"], COLOR_TEXT)).get_width()
+            if px + part_w > max_w:
+                lines += 1
+                px = 0
+            px += part_w
+        return max(1, lines)
+
+    def _game_layout(self):
+        """Compute every in-game screen zone (single source of truth).
+
+        Both the artwork (``_draw_game`` and friends) and the interactive
+        widgets (``_rebuild_game_ui``) read from this dict, so nothing can
+        drift out of place. Zones are stacked top-down and never overlap.
+        """
+        v = self.view or {}
+        n = len(v.get("players") or [])
+        # The player strip lives in the main column; the chat column on the
+        # right stays full-height so its history never shrinks.
+        main_w = _G_MAIN_R - _G_MAIN_L
+        pw = (main_w - max(0, n - 1) * _G_PLAY_GAP) // max(n, 1)
+        # Panel height adapts to the widest stall so the nameplate rows
+        # always fit; every zone below the strip shifts by the same amount.
+        small = n >= 5
+        row_fs = 13 if small else 14              # nameplate row font
+        stall_fs = 12 if small else 13            # stall font
+        row_adv = get_font(row_fs).get_height() + 2   # _draw_block advance
+        stall_adv = 18                            # _draw_stall_colored advance
+        stall_lines = 1
+        for p in (v.get("players") or []):
+            stall_lines = max(stall_lines,
+                              self._stall_line_count(p, stall_fs,
+                                                     max(60, pw - 16)))
+        # The smuggled line (full detail for yourself) can also wrap.
+        you = v.get("you") or {}
+        me = None
+        if self.my_seat is not None and 0 <= self.my_seat < n:
+            me = (v.get("players") or [])[self.my_seat]
+        if me is not None:
+            mine = you.get("stand_contra") or []
+            counts = {}
+            for c in mine:
+                if c["type"] not in game.ROYAL_TYPES:
+                    counts[c["type"]] = counts.get(c["type"], 0) + 1
+            ctext = (" ".join(f"{self._tn(t)}x{n}" for t, n in counts.items())
+                     if counts else self._t("empty"))
+            stxt = self._t("smuggle_own", s=ctext)
+        else:
+            stxt = self._t("smuggle_secret", n=0)
+        smuggle_lines = max(1, len(self._wrap_text(stxt, get_font(row_fs),
+                                                   max(60, pw - 16))))
+        extra_rows = 3            # gold/hand, bag, declared
+        if (self._rule_mod_enabled("merchant_reputation")
+                or self._rule_mod_enabled("royal_favor")):
+            extra_rows += 1
+        name_h = 6 + get_font(15 if small else 17).get_height() + 3
+        play_h = (name_h + extra_rows * row_adv
+                  + stall_lines * stall_adv + smuggle_lines * row_adv + 4)
+        play_h = max(150, min(230, play_h))
+        shift = play_h - _G_PLAY_H
+        bm_top = _G_BM_TOP + shift
+        bm = v.get("black_market") or {}
+        bm_types = bm.get("types") or []
+        bm_h = self._bm_panel_h(len(bm_types)) if bm_types else 0
+        if bm_h:
+            bag_y = _G_BAG_Y + shift
+            hand_y = _G_HAND_Y + shift
+            instr_y = _G_INSTR_Y + shift
+            act_y = _G_ACT_Y + shift
+        else:
+            # No black-market quests: move the lower zones up to fill the gap.
+            bag_y = bm_top + 4
+            hand_y = bag_y + 30
+            instr_y = hand_y + _G_HAND_H + 10
+            act_y = instr_y + 32
+        # Chat column internals (quick-chat block + input pin to the bottom).
+        phrases = lang.UI[self.lang].get("phrases") or []
+        qc_cols = 2
+        qc_rows = (len(phrases) + qc_cols - 1) // qc_cols
+        qc_row_h = 29
+        qc_gap = 4
+        qc_h = qc_rows * qc_row_h + max(0, qc_rows - 1) * qc_gap
+        chat_rect = pygame.Rect(_G_CHAT_X, _G_CHAT_TOP, _G_CHAT_W,
+                                H - _G_CHAT_TOP - 8)
+        input_y = chat_rect.bottom - 8 - 34
+        qc_top = input_y - 8 - qc_h
+        return {
+            "n": n, "pw": pw, "play_top": _G_PLAY_TOP, "play_h": play_h,
+            "bm_top": bm_top, "bm_h": bm_h,
+            "bag_y": bag_y, "hand_y": hand_y,
+            "instr_y": instr_y, "act_y": act_y,
+            "chat_rect": chat_rect, "qc_top": qc_top, "qc_cols": qc_cols,
+            "qc_row_h": qc_row_h, "qc_gap": qc_gap, "input_y": input_y,
+            "hist_bottom": qc_top - 6,
+        }
+
+    def _wrapped_cache(self, text, font, max_w):
+        """Wrap text with caching so scrolling/animating screens do not
+        re-wrap long release notes on every frame."""
+        ck = (max_w, text)
+        if self._wrap_cache_key != ck:
+            self._wrap_cache_key = ck
+            self._wrap_cache_lines = self._wrap_text(text, font, max_w)
+        return self._wrap_cache_lines
+
     def _rebuild_game_ui(self):
         self.buttons = []
         self.hand_buttons = []
+        self.game_lay = self._game_layout()
+        lay = self.game_lay
         v = self.view or {}
         prompt = v.get("prompt") or {}
         kind = prompt.get("kind")
         you = v.get("you") or {}
         hand = you.get("hand", [])
 
+        # Input boxes live at fixed positions inside their zones.
+        cr = lay["chat_rect"]
+        self.chat_input.rect = pygame.Rect(cr.x + 8, lay["input_y"], cr.w - 16, 34)
+        self.gold_input.rect = pygame.Rect(70, lay["act_y"] + 2, 104, 36)
+        self.msg_input.rect = pygame.Rect(192, lay["act_y"] + 2, 330, 36)
+
         sel_enabled = kind in ("market_discard", "load_bag")
         banned = prompt.get("banned") if kind == "load_bag" else None
-        # Hand buttons
+        # Hand cards: one row of 7 fits the main column (max hand is 7); a
+        # second row is still supported for safety.
         for i, c in enumerate(hand):
-            rect = pygame.Rect(40 + (i % 6) * 132, 470 + (i // 6) * 116, 124, 104)
+            col = i % 7
+            row = i // 7
+            rect = pygame.Rect(_G_MAIN_L + col * (_G_HAND_W + _G_HAND_GAP),
+                               lay["hand_y"] + row * (_G_HAND_H + 10),
+                               _G_HAND_W, _G_HAND_H)
             sel = i in self.selected
             ct = c["type"]
             royal = ct in game.ROYAL_TYPES
@@ -1352,7 +1537,7 @@ class App:
             if royal:
                 eq = c.get("equals") or game.ROYAL_GOODS.get(ct, {}).get("equals", 2)
                 of = self._tn(c.get("of") or game.ROYAL_TYPE_OF.get(ct, ""))
-                label = "★ " + self._tn(ct)
+                label = "★" + self._tn(ct)
                 sub = (self._t("royal_tag") + f"={eq}" + of + " · " +
                        self._t("ctag_fine", f=c.get("fine", c["value"])))
             elif contra:
@@ -1373,73 +1558,79 @@ class App:
                        value=c["value"], sub=sub)
             self.hand_buttons.append(b)
 
-        # Quick chat (left side, below buttons; hidden while the gold input is used)
-        kind = prompt.get("kind")
-        if kind not in ("bribe", "inspect", "counter_bribe"):
-            for i, ph in enumerate(lang.UI[self.lang]["phrases"]):
-                x = 40 + (i % 2) * 190
-                y = 668 + (i // 2) * 36
-                self.buttons.append(Button((x, y, 182, 30), ph, lambda ph=ph: self._quick_chat(ph)))
+        # Quick chat lives at the bottom of the chat panel.
+        phrases = lang.UI[self.lang].get("phrases") or []
+        qcw = (cr.w - 16 - 6) // 2
+        for i, ph in enumerate(phrases):
+            col = i % lay["qc_cols"]
+            row = i // lay["qc_cols"]
+            x = cr.x + 8 + col * (qcw + 6)
+            y = lay["qc_top"] + row * (lay["qc_row_h"] + lay["qc_gap"])
+            self.buttons.append(Button((x, y, qcw, lay["qc_row_h"]), ph,
+                                       lambda ph=ph: self._quick_chat(ph), fs=13))
 
+        ay = lay["act_y"]
         kind = prompt.get("kind")
         if kind == "market_discard":
-            self.buttons.append(Button((40, 620, 160, 42), self._t("btn_discard_sel"),
+            self.buttons.append(Button((16, ay, 200, 42), self._t("btn_discard_sel"),
                                        lambda: self._market_discard()))
-            self.buttons.append(Button((215, 620, 200, 42), self._t("btn_discard_0"),
+            self.buttons.append(Button((232, ay, 220, 42), self._t("btn_discard_0"),
                                        lambda: self._market_discard(empty=True)))
         elif kind == "market_draw":
-            self.buttons.append(Button((40, 610, 230, 42),
+            self.buttons.append(Button((16, ay, 250, 42),
                                        self._t("btn_deck", n=v.get("deck_count", 0)),
                                        lambda: self._market_draw("deck")))
-            self.buttons.append(Button((285, 610, 150, 42), self._t("btn_stop_draw"),
+            self.buttons.append(Button((282, ay, 180, 42), self._t("btn_stop_draw"),
                                        lambda: self._send({"t": "market_done"})))
         elif kind == "load_bag":
             n = len(self.selected)
             mx = prompt.get("bag_max", game.BAG_MAX)
-            self.buttons.append(Button((40, 610, 240, 42), self._t("btn_seal", n=n),
+            self.buttons.append(Button((16, ay, 260, 42), self._t("btn_seal", n=n),
                                        lambda: self._load_bag(), enabled=1 <= n <= mx))
         elif kind == "declare":
             n_leg = len(game.LEGAL)
-            step = min(150, (W - 80) // max(n_leg + 1, 1))
+            step = 176
             for i, t in enumerate(game.LEGAL):
-                self.buttons.append(Button((40 + i * step, 610, step - 10, 42), self._tn(t),
-                                           lambda t=t: self._pick_decl(t), highlight=self.decl_type == t))
-            self.buttons.append(Button((40 + n_leg * step, 610, 220, 42),
+                self.buttons.append(Button((16 + i * step, ay, 168, 42), self._tn(t),
+                                           lambda t=t: self._pick_decl(t),
+                                           highlight=self.decl_type == t))
+            self.buttons.append(Button((16 + n_leg * step, ay, 176, 42),
                                        self._t("btn_confirm_decl", n=prompt.get("bag_count", 0)),
-                                       lambda: self._do_declare(), enabled=self.decl_type is not None))
+                                       lambda: self._do_declare(),
+                                       enabled=self.decl_type is not None))
         elif kind == "bribe":
-            self.buttons.append(Button((40, 610, 150, 42), self._t("btn_submit_bribe"), lambda: self._do_bribe()))
-            self.buttons.append(Button((205, 610, 130, 42), self._t("btn_no_bribe"), lambda: self._do_bribe(none=True)))
+            self.buttons.append(Button((538, ay, 150, 42), self._t("btn_submit_bribe"),
+                                       lambda: self._do_bribe()))
+            self.buttons.append(Button((704, ay, 150, 42), self._t("btn_no_bribe"),
+                                       lambda: self._do_bribe(none=True)))
         elif kind == "inspect":
             can_counter = (prompt.get("bribe_gold", 0) > 0
                            and prompt.get("round", 0) < prompt.get("max_round", 99))
-            self.buttons.append(Button((40, 610, 140, 42), self._t("btn_pass"),
+            self.buttons.append(Button((190, ay, 130, 42), self._t("btn_pass"),
                                        lambda: self._inspect_decision("pass")))
-            self.buttons.append(Button((195, 610, 120, 42), self._t("btn_inspect"),
+            self.buttons.append(Button((332, ay, 130, 42), self._t("btn_inspect"),
                                        lambda: self._inspect_decision("inspect")))
-            self.buttons.append(Button((330, 610, 150, 42), self._t("btn_counter"),
+            self.buttons.append(Button((474, ay, 150, 42), self._t("btn_counter"),
                                        lambda: self._sheriff_counter(), enabled=can_counter))
             intel = v.get("intel") or {}
             if intel.get("available"):
-                self.buttons.append(Button(
-                    (500, 610, 170, 42),
-                    self._t("btn_intel", cost=intel.get("cost", 0)),
-                    lambda: self._send({"t": "sheriff_intel"})))
+                self.buttons.append(Button((636, ay, 120, 42),
+                                           self._t("btn_intel", cost=intel.get("cost", 0)),
+                                           lambda: self._send({"t": "sheriff_intel"})))
             if prompt.get("rumor_ok"):
-                self.buttons.append(Button(
-                    (680, 610, 150, 42),
-                    self._t("btn_rumor"),
-                    lambda: self._send({"t": "rumor"})))
+                self.buttons.append(Button((768, ay, 120, 42), self._t("btn_rumor"),
+                                           lambda: self._send({"t": "rumor"})))
         elif kind == "counter_bribe":
             can_counter = prompt.get("round", 0) < prompt.get("max_round", 99)
-            self.buttons.append(Button((40, 610, 140, 42), self._t("btn_accept"),
+            self.buttons.append(Button((190, ay, 140, 42), self._t("btn_accept"),
                                        lambda: self._send({"t": "counter_response", "action": "accept"})))
-            self.buttons.append(Button((195, 610, 120, 42), self._t("btn_reject"),
+            self.buttons.append(Button((342, ay, 140, 42), self._t("btn_reject"),
                                        lambda: self._send({"t": "counter_response", "action": "reject"})))
-            self.buttons.append(Button((330, 610, 150, 42), self._t("btn_counter"),
+            self.buttons.append(Button((494, ay, 170, 42), self._t("btn_counter"),
                                        lambda: self._merchant_counter(), enabled=can_counter))
 
-        # Black market reward submit buttons (next to each task, grayed until claimable)
+        # Black market reward submit buttons (next to each task, grayed
+        # until claimable).
         bm = v.get("black_market")
         if bm and bm.get("types"):
             types = bm.get("types") or []
@@ -1450,7 +1641,7 @@ class App:
                 if c.get("type") in types:
                     mine[c["type"]] = mine.get(c["type"], 0) + 1
             for i, t_ in enumerate(types):
-                ry = _BM_Y + _BM_HEADER + i * _BM_ROW
+                ry = lay["bm_top"] + _BM_HEADER + i * _BM_ROW
                 slot = claimed.get(t_, 0)
                 can = (slot < 2 and (mine.get(t_, 0) or 0) >= need)
                 self.buttons.append(Button(
@@ -1459,10 +1650,10 @@ class App:
                     lambda t_=t_, slot=slot: self._bm_submit(t_, slot),
                     enabled=can))
         if self.is_host and not self.disconnected:
-            self.buttons.append(Button((W - 170, 8, 160, 40), self._t("btn_close_room"),
+            self.buttons.append(Button((W - 160, 6, 144, 36), self._t("btn_close_room"),
                                        lambda: self._send({"t": "host_quit"})))
         if self.disconnected:
-            self.buttons.append(Button((40, 700, 260, 36), self._t("btn_reconnecting"), enabled=False))
+            self.buttons.append(Button((16, 700, 260, 36), self._t("btn_reconnecting"), enabled=False))
 
     def _market_discard(self, empty=False):
         cards = [] if empty else sorted(self.selected)
@@ -2132,7 +2323,7 @@ class App:
             self.screen.blit(hd, (cx + 16, 310))
             area = pygame.Rect(cx + 12, 342, 656, 290)
             self.screen.set_clip(area)
-            lines = self._wrap_text(notes, get_font(17), area.width - 8)
+            lines = self._wrapped_cache(notes, get_font(17), area.width - 8)
             total_h = len(lines) * 25
             max_scroll = max(0, total_h - area.height + 6)
             self.update_scroll = min(self.update_scroll, max_scroll)
@@ -2151,6 +2342,41 @@ class App:
 
     # ---------- Drawing ----------
 
+    def _canvas_dirty_now(self):
+        """True when the canvas actually needs a redraw this frame.
+
+        Menu screens are mostly idle (static text, no blinking cursor), so
+        reusing the cached scaled frame lets them run at full speed even on
+        big windows; hover glows, flashes, fades, scrolling, chat/view
+        updates and window changes all force a redraw.
+        """
+        if not self._present_valid:
+            return True
+        if self._fade_t is not None:
+            return True
+        if _CANVAS_MOUSE != self._last_canvas_mouse:
+            return True
+        if self.chat_version != self._last_chat_version_drawn:
+            return True
+        if self.ui_version != self._last_ui_version_drawn:
+            return True
+        if (id(self.buttons), id(self.hand_buttons)) != self._last_btn_ids:
+            return True
+        for sc in ("chat_scroll", "menu_news_scroll", "update_scroll",
+                   "mods_scroll", "market_scroll", "lobby_mods_scroll",
+                   "history_scroll"):
+            if getattr(self, sc, 0) != self._last_scrolls.get(sc, 0):
+                return True
+        if self.update_progress != self._last_update_progress:
+            return True
+        for b in self.buttons + self.hand_buttons:
+            if b._flash_at or b.down:
+                return True
+            target = 1.0 if (b.enabled and b.rect.collidepoint(_CANVAS_MOUSE)) else 0.0
+            if abs(b._hover - target) > 0.02:
+                return True
+        return False
+
     def draw(self):
         global _CANVAS_MOUSE
         _CANVAS_MOUSE = self._mouse()
@@ -2158,53 +2384,80 @@ class App:
         if name != self._last_drawn_screen:
             self._last_drawn_screen = name
             self._fade_t = 0.0
-        if self.screen_name == "game":
-            self.screen.fill(COLOR_BG)
-        else:
-            self._decor_bg()
-        if self.screen_name == "menu":
-            self._draw_menu()
-        elif self.screen_name == "mods":
-            self._draw_mods()
-        elif self.screen_name == "market":
-            self._draw_market()
-        elif self.screen_name == "settings":
-            self._draw_settings()
-        elif self.screen_name == "history":
-            self._draw_history()
-        elif self.screen_name == "update":
-            self._draw_update()
-        elif self.screen_name == "lobby":
-            self._draw_lobby()
-        elif self.screen_name == "game":
-            self._draw_game()
-        elif self.screen_name == "over":
-            self._draw_over()
-        # Screen-change animation: quick fade in from black (~0.2s). The
-        # overlay surface is reused every frame (no per-frame allocation).
-        if self._fade_t is not None:
-            if self._fade_t >= 1.0:
-                self._fade_t = None
+            self._present_valid = False
+        if not self._present_valid or self._canvas_dirty_now():
+            if self.screen_name == "game":
+                self.screen.fill(COLOR_BG)
             else:
-                self._fade_t = min(1.0, self._fade_t + 0.09)
-                a = int(255 * (1.0 - self._fade_t))
-                if a > 0:
-                    ov = self._fade_ov
-                    ov.fill((0, 0, 0, a))
-                    self.screen.blit(ov, (0, 0))
-        # Present the logical canvas onto the real window. Smooth (bilinear)
-        # resampling keeps edges clean; the scaled frame is cached.
-        if self.stretch:
-            self._present = _smooth_to(self.screen, (self.win_w, self.win_h),
-                                       self._present)
-            self.window.blit(self._present, (0, 0))
-        elif self.win_w == W and self.win_h == H:
-            self.window.blit(self.screen, (0, 0))
+                self._decor_bg()
+            if self.screen_name == "menu":
+                self._draw_menu()
+            elif self.screen_name == "mods":
+                self._draw_mods()
+            elif self.screen_name == "market":
+                self._draw_market()
+            elif self.screen_name == "settings":
+                self._draw_settings()
+            elif self.screen_name == "history":
+                self._draw_history()
+            elif self.screen_name == "update":
+                self._draw_update()
+            elif self.screen_name == "lobby":
+                self._draw_lobby()
+            elif self.screen_name == "game":
+                self._draw_game()
+            elif self.screen_name == "over":
+                self._draw_over()
+            # Screen-change animation: quick fade in from black (~0.2s). The
+            # overlay surface is reused every frame (no per-frame allocation).
+            if self._fade_t is not None:
+                if self._fade_t >= 1.0:
+                    self._fade_t = None
+                else:
+                    self._fade_t = min(1.0, self._fade_t + 0.09)
+                    a = int(255 * (1.0 - self._fade_t))
+                    if a > 0:
+                        ov = self._fade_ov
+                        ov.fill((0, 0, 0, a))
+                        self.screen.blit(ov, (0, 0))
+            # Present the logical canvas onto the real window. Smooth
+            # (bilinear) resampling keeps edges clean; the scaled frame is
+            # cached and reused while the canvas is unchanged.
+            if self.stretch:
+                self._present = _smooth_to(self.screen, (self.win_w, self.win_h),
+                                           self._present)
+                self.window.blit(self._present, (0, 0))
+            elif self.win_w == W and self.win_h == H:
+                self.window.blit(self.screen, (0, 0))
+            else:
+                self.window.fill((0, 0, 0))
+                self._present = _smooth_to(self.screen, self._present.get_size(),
+                                           self._present)
+                self.window.blit(self._present, (self.offset_x, self.offset_y))
+            self._present_valid = True
+            self._last_canvas_mouse = _CANVAS_MOUSE
+            self._last_chat_version_drawn = self.chat_version
+            self._last_ui_version_drawn = self.ui_version
+            self._last_btn_ids = (id(self.buttons), id(self.hand_buttons))
+            self._last_scrolls = {
+                "chat_scroll": self.chat_scroll,
+                "menu_news_scroll": self.menu_news_scroll,
+                "update_scroll": self.update_scroll,
+                "mods_scroll": self.mods_scroll,
+                "market_scroll": self.market_scroll,
+                "lobby_mods_scroll": self.lobby_mods_scroll,
+                "history_scroll": getattr(self, "history_scroll", 0),
+            }
+            self._last_update_progress = self.update_progress
         else:
-            self.window.fill((0, 0, 0))
-            self._present = _smooth_to(self.screen, self._present.get_size(),
-                                       self._present)
-            self.window.blit(self._present, (self.offset_x, self.offset_y))
+            # Idle frame: re-blit the cached scaled frame, no redraw.
+            if self.stretch:
+                self.window.blit(self._present, (0, 0))
+            elif self.win_w == W and self.win_h == H:
+                self.window.blit(self.screen, (0, 0))
+            else:
+                self.window.fill((0, 0, 0))
+                self.window.blit(self._present, (self.offset_x, self.offset_y))
 
     def _draw_menu(self):
         title = get_font(46).render(self._t("title"), True, COLOR_ACCENT)
@@ -2284,7 +2537,7 @@ class App:
                 t = get_font(17).render(self._t("menu_news_none"), True, COLOR_DIM)
             self.screen.blit(t, (body.x, body.y))
             return
-        lines = self._wrap_text(notes, get_font(16), body.width - 8)
+        lines = self._wrapped_cache(notes, get_font(16), body.width - 8)
         total_h = len(lines) * 22
         max_scroll = max(0, total_h - body.height + 6)
         self.menu_news_scroll = min(self.menu_news_scroll, max_scroll)
@@ -2476,19 +2729,54 @@ class App:
 
     def _draw_game(self):
         v = self.view or {}
+        lay = getattr(self, "game_lay", None)
+        if lay is None:
+            lay = self.game_lay = self._game_layout()
+        # ---------- Top bar: title + deck + rule-mod chips ----------
         phase = lang.PHASES[self.lang].get(v.get("phase"), "?")
         sheriff_name = (v.get("players") or [{}])[v.get("sheriff", 0)].get("name", "?") if v.get("players") else "?"
-        head = self._t("head", phase=phase, r=v.get("round", 0), t=v.get("rounds_total", 0), name=sheriff_name)
-        t = get_font(24).render(head, True, COLOR_ACCENT)
-        self.screen.blit(t, (20, 16))
+        head = self._t("head", phase=phase, r=v.get("round", 0),
+                       t=v.get("rounds_total", 0), name=sheriff_name)
+        t = get_font(23).render(head, True, COLOR_ACCENT)
+        self.screen.blit(t, (_G_MAIN_L, 10))
+        # Deck info (right side of line 1, before the close-room button).
+        dk = get_font(15).render(self._t("deck_info", n=v.get("deck_count", 0)),
+                                 True, COLOR_DIM)
+        dk_x = W - 176 - dk.get_width()
+        self.screen.blit(gfx.card_back(30, 42), (dk_x - 40, 8))
+        self.screen.blit(dk, (dk_x, 20))
+        # Rule-mod chips (line 2, right-aligned).
+        self._draw_rule_chips(v)
+        # ---------- Player strip (one row, all players) ----------
+        self._draw_player_strip(v, lay)
+        # ---------- Black market ----------
+        self._draw_black_market()
+        # ---------- Your table (bag + smuggled keep) ----------
+        self._draw_your_table(v, lay)
+        # ---------- Instruction / waiting line ----------
+        prompt = v.get("prompt") or {}
+        kind = prompt.get("kind")
+        instr = self._build_instr(v)
+        t = get_font(19).render(instr, True, COLOR_GREEN if kind else COLOR_DIM)
+        self.screen.blit(t, (_G_MAIN_L, lay["instr_y"]))
+        # ---------- Hand cards + bribe inputs + action buttons ----------
+        for b in self.hand_buttons:
+            b.draw(self.screen)
+        pk = kind
+        if pk in ("bribe", "inspect", "counter_bribe"):
+            label = self._t("bribe_gold") if pk == "bribe" else self._t("lbl_counter_amount")
+            t = get_font(16).render(label, True, COLOR_TEXT)
+            self.screen.blit(t, (16, lay["act_y"] + 9))
+            self.gold_input.draw(self.screen)
+            if pk == "bribe":
+                self.msg_input.draw(self.screen)
+        for b in self.buttons:
+            b.draw(self.screen)
+        # ---------- Chat panel ----------
+        self._draw_chat_panel(v, lay)
 
-        # Deck info only (discard piles are hidden and cannot be drawn from)
-        t = get_font(16).render(self._t("deck_info", n=v.get("deck_count", 0)),
-                                True, COLOR_DIM)
-        self.screen.blit(gfx.card_back(36, 52), (20, 42))
-        self.screen.blit(t, (64, 46))
-
-        # Rule-mod chips: trade route / bribe pot / action timer / guild contracts
+    def _draw_rule_chips(self, v):
+        """Trade-route / bribe-pot / action-timer / guild-contract chips."""
         chips = []
         if v.get("route") and self._rule_mod_enabled("trade_caravans"):
             chips.append((self._t("chip_route_bonus", t=self._tn(v["route"]),
@@ -2516,79 +2804,117 @@ class App:
                     chips.append((self._t("contracts_chip", t=self._tn(ct["type"]),
                                           n=min(have, ct["need"]), m=ct["need"]),
                                   COLOR_GREEN if have >= ct["need"] else COLOR_TEXT))
-        if chips:
-            cx = 864
-            for text, col in reversed(chips):
-                t = get_font(14).render(text, True, col)
-                w = t.get_width() + 16
-                cx -= w
-                pygame.draw.rect(self.screen, (56, 48, 38), (cx, 38, w, 24),
-                                 border_radius=12)
-                self.screen.blit(t, (cx + 8, 41))
+        if not chips:
+            return
+        cx = W - 12
+        for text, col in reversed(chips):
+            t = get_font(14).render(text, True, col)
+            w = t.get_width() + 16
+            cx -= w + 6
+            if cx < 460:            # keep clear of the title text
+                break
+            pygame.draw.rect(self.screen, (56, 48, 38), (cx, 38, w, 24),
+                             border_radius=12)
+            self.screen.blit(t, (cx + 8, 41))
 
-        # Player panels (multi-line nameplates)
-        plist = v.get("players", [])
-        n = len(plist)
-        crowded = n >= 5
-        pw = min(215, 860 // max(n, 1) - 10)
-        you = v.get("you") or {}
-        py, ph = 78, (146 if crowded else 152)
+    def _draw_player_strip(self, v, lay):
+        plist = v.get("players") or []
+        if not plist:
+            return
+        pw = lay["pw"]
+        x = _G_MAIN_L
         for i, p in enumerate(plist):
-            x = 20 + i * (pw + 10)
-            pygame.draw.rect(self.screen, COLOR_PANEL, (x, py, pw, ph), border_radius=8)
-            tag = self._t("sheriff_tag") if i == v.get("sheriff") else ""
-            col = COLOR_ACCENT if i == v.get("sheriff") else COLOR_TEXT
-            nx = x + 8
-            if i == v.get("sheriff"):
-                self.screen.blit(gfx.badge(20), (nx, py + 8))
-                nx += 24
-            av = 30 if crowded else 34
-            self.screen.blit(gfx.avatar_surface(p.get("avatar"), av), (x + pw - av - 8, py + 8))
-            t = get_font(16 if crowded else 17).render(tag + p["name"], True, col)
-            self.screen.blit(t, (nx, py + 6))
-            yy = py + 30
-            gold = self._t("gold_hand", g=p["gold"], h=p["hand_count"])
-            self.screen.blit(gfx.coin(16), (x + 8, yy + 2))
-            yy = self._draw_block(self.screen, gold, x + 26, yy,
-                                  get_font(14 if crowded else 15),
-                                  COLOR_TEXT, max(40, pw - 56)) + 2
-            if p.get("bag_size"):
-                yy = self._draw_block(self.screen,
-                                      self._t("bag_sealed", n=p["bag_size"]),
-                                      x + 8, yy, get_font(14), COLOR_GOLD, pw - 16) + 2
-            if self._rule_mod_enabled("merchant_reputation") and p.get("reputation"):
-                t = get_font(13).render(self._t("rep_chip", n=p["reputation"]),
-                                        True, COLOR_GOLD)
-                self.screen.blit(t, (x + pw - t.get_width() - 6, py + 70))
-            if self._rule_mod_enabled("royal_favor") and p.get("royal_favor"):
-                t = get_font(13).render(self._t("favor_chip", n=p["royal_favor"]),
-                                        True, COLOR_GOLD)
-                self.screen.blit(t, (x + pw - t.get_width() - 6, py + 88))
-            if not p.get("connected", True):
-                t = get_font(15).render(self._t("offline_tag"), True, COLOR_RED)
-                self.screen.blit(t, (x + 8, yy)); yy += 20
-            if p.get("decl"):
-                d = p["decl"]
-                _out_blit(self.screen, get_font(14 if crowded else 15),
-                          self._t("declared", t=self._tn(d["type"]), c=d["count"]),
-                          TYPE_COLOR.get(d["type"], COLOR_GREEN), (x + 8, yy))
-                yy += 20
-            yy = self._draw_stall_colored(x + 8, yy, pw - 16, p,
-                                          font_size=13 if crowded else 14) + 4
-            if i == self.my_seat:
-                mine = you.get("stand_contra") or []
-                counts = {}
-                for c in mine:
-                    if c["type"] not in game.ROYAL_TYPES:
-                        counts[c["type"]] = counts.get(c["type"], 0) + 1
-                contra_text = (" ".join(f"{self._tn(t)}x{n}" for t, n in counts.items())
-                               if counts else self._t("empty"))
-                contra_txt = self._t("smuggle_own", s=contra_text)
-            else:
-                contra_txt = self._t("smuggle_secret", n=p.get("smuggle_count", 0))
-            self._draw_block(self.screen, contra_txt, x + 8, yy, get_font(14), COLOR_CONTRA_TEXT, pw - 16)
+            self._draw_player_panel(x, lay["play_top"], pw, lay["play_h"], p, i, v)
+            x += pw + _G_PLAY_GAP
 
-        # Instruction line
+    def _draw_player_panel(self, x, y, w, h, p, i, v):
+        """One nameplate: name+avatar, gold/hand, bag, declaration, mod
+        chips, colored stall and the smuggled line. Rows are stacked and
+        never overlap regardless of the player count."""
+        small = len(v.get("players") or []) >= 5
+        sheriff = i == v.get("sheriff")
+        pygame.draw.rect(self.screen, COLOR_PANEL, (x, y, w, h), border_radius=10)
+        pygame.draw.rect(self.screen, COLOR_ACCENT if sheriff else (50, 42, 34),
+                         (x, y, w, h), 2, border_radius=10)
+        av = 26 if small else 32
+        self.screen.blit(gfx.avatar_surface(p.get("avatar"), av),
+                         (x + w - av - 6, y + 6))
+        f_name = get_font(15 if small else 17)
+        tag = self._t("sheriff_tag") if sheriff else ""
+        name_t = tag + p.get("name", "?")
+        while (f_name.size(name_t)[0] > w - av - 18
+               and f_name.get_height() > 11):
+            f_name = get_font(f_name.get_height() - 1)
+        col = COLOR_ACCENT if sheriff else COLOR_TEXT
+        self.screen.blit(f_name.render(name_t, True, col), (x + 8, y + 6))
+        if not p.get("connected", True):
+            ot = get_font(13).render(self._t("offline_tag"), True, COLOR_RED)
+            self.screen.blit(ot, (x + w - av - 6 - ot.get_width() - 6,
+                                  y + 6 + (av - ot.get_height()) // 2))
+        f = get_font(13 if small else 14)
+        yy = y + 6 + f_name.get_height() + 3
+        # Gold + hand count.
+        self.screen.blit(gfx.coin(13), (x + 8, yy + 1))
+        yy = self._draw_block(self.screen,
+                              self._t("gold_hand", g=p.get("gold", 0),
+                                      h=p.get("hand_count", 0)),
+                              x + 24, yy, f, COLOR_TEXT, w - 32)
+        # Sealed bag.
+        if p.get("bag_size"):
+            yy = self._draw_block(self.screen,
+                                  self._t("bag_sealed", n=p["bag_size"]),
+                                  x + 8, yy, f, COLOR_GOLD, w - 16)
+        # Declaration (may be a lie - colored by declared goods type).
+        if p.get("decl"):
+            d = p["decl"]
+            _out_blit(self.screen, f,
+                      self._t("declared", t=self._tn(d["type"]), c=d["count"]),
+                      TYPE_COLOR.get(d["type"], COLOR_GREEN), (x + 8, yy))
+            yy += f.get_height() + 2
+        # Reputation / royal-favour chips (only with the matching rule mods).
+        chips = []
+        if self._rule_mod_enabled("merchant_reputation") and p.get("reputation"):
+            chips.append(self._t("rep_chip", n=p["reputation"]))
+        if self._rule_mod_enabled("royal_favor") and p.get("royal_favor"):
+            chips.append(self._t("favor_chip", n=p["royal_favor"]))
+        if chips:
+            _out_blit(self.screen, f, "  ".join(chips), COLOR_GOLD, (x + 8, yy))
+            yy += f.get_height() + 2
+        # Stall with per-goods colors (reskin mods recolor these).
+        yy = self._draw_stall_colored(x + 8, yy, w - 16, p,
+                                      font_size=12 if small else 13)
+        # Smuggled goods: full detail for yourself, a count for everyone else.
+        you = v.get("you") or {}
+        if i == self.my_seat:
+            mine = you.get("stand_contra") or []
+            counts = {}
+            for c in mine:
+                if c["type"] not in game.ROYAL_TYPES:
+                    counts[c["type"]] = counts.get(c["type"], 0) + 1
+            contra_text = (" ".join(f"{self._tn(t)}x{n}" for t, n in counts.items())
+                           if counts else self._t("empty"))
+            contra_txt = self._t("smuggle_own", s=contra_text)
+        else:
+            contra_txt = self._t("smuggle_secret", n=p.get("smuggle_count", 0))
+        self._draw_block(self.screen, contra_txt, x + 8, yy, f,
+                         COLOR_CONTRA_TEXT, w - 16)
+
+    def _draw_your_table(self, v, lay):
+        """Your bag contents + how many contraband cards are kept in your
+        stall - a dedicated strip that never touches the hand cards."""
+        you = v.get("you") or {}
+        bag = you.get("bag", [])
+        contra_n = len(you.get("stand_contra", []))
+        types = " ".join(self._tn(c["type"]) for c in bag) or self._t("empty")
+        bag_t = self._t("bag_info", n=len(bag), types=types, c=contra_n)
+        f = get_font(15)
+        panel = pygame.Rect(_G_MAIN_L, lay["bag_y"], _G_MAIN_R - _G_MAIN_L, 26)
+        pygame.draw.rect(self.screen, (58, 49, 39), panel, border_radius=8)
+        pygame.draw.rect(self.screen, (50, 42, 34), panel, 1, border_radius=8)
+        _out_blit(self.screen, f, bag_t, COLOR_TEXT, (panel.x + 10, panel.y + 5))
+
+    def _build_instr(self, v):
+        """Current instruction / waiting line (phase-dependent)."""
         prompt = v.get("prompt") or {}
         kind = prompt.get("kind")
         instr = None
@@ -2638,62 +2964,50 @@ class App:
                 "counter_bribe": self._t("instr_waiting_counter_bribe", name=acting),
                 "inspect": self._t("instr_waiting_inspect"),
             }.get(ap) or self._t("instr_waiting", name=acting)
-        t = get_font(20).render(instr, True, COLOR_GREEN if kind else COLOR_DIM)
-        self.screen.blit(t, (20, 236))
+        return instr
 
-        self._draw_black_market()
-
-        # Bag info
-        you = v.get("you") or {}
-        bag = you.get("bag", [])
-        contra_n = len(you.get("stand_contra", []))
-        types = " ".join(self._tn(c["type"]) for c in bag) or self._t("empty")
-        bag_t = self._t("bag_info", n=len(bag), types=types, c=contra_n)
-        t = get_font(18).render(bag_t, True, COLOR_TEXT)
-        bm = v.get("black_market")
-        bm_h = (self._bm_panel_h(len(bm.get("types") or []))
-                if (bm and bm.get("types")) else 0)
-        bag_y = 268 + bm_h + 10 if bm_h else 424
-        self.screen.blit(t, (40, bag_y))
-        # Hand & buttons
-        for b in self.hand_buttons:
-            b.draw(self.screen)
-        for b in self.buttons:
-            b.draw(self.screen)
-
-        # Chat panel (scrollable history) with the round-event strip on top
-        pygame.draw.rect(self.screen, COLOR_PANEL, (880, 60, 390, 680), border_radius=8)
-        t = get_font(18).render(self._t("chat_title"), True, COLOR_ACCENT)
-        self.screen.blit(t, (890, 66))
+    def _draw_chat_panel(self, v, lay):
+        """Right column: title, round-event strip, scrollable history,
+        quick-chat block and the chat input - all inside one panel."""
+        cr = lay["chat_rect"]
+        pygame.draw.rect(self.screen, COLOR_PANEL, cr, border_radius=10)
+        pygame.draw.rect(self.screen, (50, 42, 34), cr, 2, border_radius=10)
+        t = get_font(17).render(self._t("chat_title"), True, COLOR_ACCENT)
+        self.screen.blit(t, (cr.x + 10, cr.y + 8))
         ev_id = v.get("event")
         ev_h = 0
+        ev_top = cr.y + 34
         if ev_id:
             f14, f13 = get_font(14), get_font(13)
             ename = self._t("event_name_" + ev_id)
             edesc = self._t("event_desc_" + ev_id)
             if ev_id == "PLAGUE" and v.get("plague"):
                 edesc += "  " + self._t("event_plague_type", t=self._tn(v["plague"]))
-            title_t = f14.render("◆ " + self._t("event_title") + ": " + ename,
+            title_t = f14.render("● " + self._t("event_title") + ": " + ename,
                                  True, COLOR_ACCENT)
-            dlines = self._wrap_text(edesc, f13, 366)[:4]
+            dlines = self._wrap_text(edesc, f13, cr.w - 16)[:4]
             ev_h = 24 + len(dlines) * 15 + 4
-            ev_top = 88
-            pygame.draw.rect(self.screen, (58, 48, 30), (884, ev_top, 382, ev_h),
-                             border_radius=6)
-            pygame.draw.rect(self.screen, COLOR_ACCENT, (884, ev_top, 382, ev_h),
-                             1, border_radius=6)
-            self.screen.blit(title_t, (892, ev_top + 4))
+            pygame.draw.rect(self.screen, (58, 48, 30),
+                             (cr.x + 4, ev_top, cr.w - 8, ev_h), border_radius=6)
+            pygame.draw.rect(self.screen, COLOR_ACCENT,
+                             (cr.x + 4, ev_top, cr.w - 8, ev_h), 1, border_radius=6)
+            self.screen.blit(title_t, (cr.x + 12, ev_top + 4))
             dy = ev_top + 23
             for dl in dlines:
                 d = f13.render(dl, True, COLOR_DIM)
-                self.screen.blit(d, (892, dy))
+                self.screen.blit(d, (cr.x + 12, dy))
                 dy += 15
-        body = pygame.Rect(890, 96 + ev_h + 4, 372, 622 - ev_h - 4)
+        body = pygame.Rect(cr.x + 8, ev_top + ev_h + 6, cr.w - 26,
+                           lay["hist_bottom"] - (ev_top + ev_h + 6))
+        self.chat_body_rect = body
         font = get_font(16)
-        lines = []
-        for text, col in self.chat_log:
-            for ln in self._wrap_text(text, font, 360):
-                lines.append((ln, col))
+        if self._chat_lines_version != self.chat_version:
+            self._chat_lines = []
+            for text, col in self.chat_log:
+                for ln in self._wrap_text(text, font, body.width - 8):
+                    self._chat_lines.append((ln, col))
+            self._chat_lines_version = self.chat_version
+        lines = self._chat_lines
         line_h = 20
         visible = max(1, body.height // line_h)
         max_scroll = max(0, len(lines) - visible)
@@ -2712,9 +3026,6 @@ class App:
                 self.screen.blit(rt, (body.x, y))
         self.screen.set_clip(None)
         if max_scroll > 0:
-            # scrollbar: wider track + visible knob + track-click paging.
-            # Knob sits at the bottom when viewing the newest messages and
-            # moves up as you scroll back through the history.
             track = pygame.Rect(body.right - 13, body.y, 10, body.height)
             pygame.draw.rect(self.screen, (42, 36, 28), track, border_radius=4)
             hh = max(26, int(body.height * visible / max(1, len(lines))))
@@ -2725,19 +3036,10 @@ class App:
             pygame.draw.rect(self.screen, (46, 36, 24), knob, 1, border_radius=4)
             self.chat_thumb = knob
             hint = get_font(13).render(self._t("chat_scroll_hint"), True, COLOR_DIM)
-            self.screen.blit(hint, (880 + 390 - hint.get_width() - 24, 70))
+            self.screen.blit(hint, (cr.right - hint.get_width() - 12, cr.y + 10))
         else:
             self.chat_thumb = None
         self.chat_input.draw(self.screen)
-
-        pk = (prompt or {}).get("kind")
-        if pk in ("bribe", "inspect", "counter_bribe"):
-            label = self._t("bribe_gold") if pk == "bribe" else self._t("lbl_counter_amount")
-            t = get_font(16).render(label, True, COLOR_TEXT)
-            self.screen.blit(t, (40, 646))
-            self.gold_input.draw(self.screen)
-            if pk == "bribe":
-                self.msg_input.draw(self.screen)
 
     def _bm_panel_h(self, n_types):
         """Height of the black-market quest panel for n quest groups."""
@@ -2756,7 +3058,8 @@ class App:
         claimed = bm.get("claimed") or {}
         claimers = bm.get("claimers") or {}
         hgt = self._bm_panel_h(len(types))
-        px, py = _BM_X, _BM_Y
+        px = _BM_X
+        py = getattr(self, "game_lay", None).get("bm_top", _G_BM_TOP) if getattr(self, "game_lay", None) else _G_BM_TOP
         pygame.draw.rect(self.screen, (54, 44, 32), (px, py, _BM_W, hgt),
                          border_radius=10)
         pygame.draw.rect(self.screen, COLOR_BORDER_ROYAL, (px, py, _BM_W, hgt),
@@ -2928,7 +3231,9 @@ class App:
                 self._update_ui_dirty = False
                 if self.screen_name == "update":
                     self._rebuild_update_ui()
-            for ev in pygame.event.get():
+            events = pygame.event.get()
+            had_events = bool(events)
+            for ev in events:
                 if ev.type == pygame.QUIT:
                     self.done = True
                 else:
@@ -2939,6 +3244,10 @@ class App:
                         except Exception:  # noqa: BLE001 - keep default pos
                             pass
                     self.handle_event(ev)
+            if had_events:
+                # Clicks/keys may change text, toasts and notes without
+                # moving the mouse; force a redraw so they appear at once.
+                self.ui_version += 1
             self.process_client_msgs()
             self.draw()
             pygame.display.flip()
