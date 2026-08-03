@@ -136,7 +136,7 @@ class GameServer:
         if not ok or not msg or msg.get("t") != "hello":
             conn.close()
             return
-        rules = self._norm_mods(msg.get("mods"))
+        rules = self._full_mods(msg.get("mods"))
         avatar = profile.avatar_from_payload(msg.get("avatar"))
         ver = str(msg.get("ver", "")).strip()
         if ver != version.__version__:
@@ -222,7 +222,7 @@ class GameServer:
 
     @staticmethod
     def _norm_mods(raw):
-        """Normalize a client-reported rule-mod list to [{"id","version"}] sorted."""
+        """Normalize a rule-mod list to [{"id","version"}] sorted (comparison only)."""
         out = []
         for m in raw or []:
             if not isinstance(m, dict):
@@ -234,6 +234,27 @@ class GameServer:
         out.sort(key=lambda x: x["id"])
         return out
 
+    @staticmethod
+    def _full_mods(raw):
+        """Keep the full rule-mod info (id/version/name/name_zh/descriptions) so the
+        lobby can show localized names and the detailed rules of every rule mod."""
+        out = []
+        for m in raw or []:
+            if not isinstance(m, dict):
+                continue
+            mid = str(m.get("id", "")).strip()
+            if not mid:
+                continue
+            out.append({"id": mid,
+                        "version": str(m.get("version", "")).strip(),
+                        "name": str(m.get("name", "") or mid),
+                        "name_zh": str(m.get("name_zh", "") or ""),
+                        "category": str(m.get("category", "rules")),
+                        "description": str(m.get("description", "") or ""),
+                        "description_zh": str(m.get("description_zh", "") or "")})
+        out.sort(key=lambda x: x["id"].lower())
+        return out
+
     def _seat_mods_ok(self, s):
         """True when a seat's rule mods match the host's (bots always match)."""
         if s is None:
@@ -241,7 +262,7 @@ class GameServer:
         if s.get("bot"):
             return True  # bots run inside the host process -> always in sync
         host_mods = self.seats[0]["rules_mods"] if self.seats[0] else []
-        return self._norm_mods(s.get("rules_mods")) == host_mods
+        return self._norm_mods(s.get("rules_mods")) == self._norm_mods(host_mods)
 
     def _mods_check(self):
         """List of seats whose rule mods differ from the host's (humans only)."""
@@ -251,7 +272,7 @@ class GameServer:
             if s is None or s.get("bot") or s["conn"] is None:
                 continue
             have = self._norm_mods(s.get("rules_mods"))
-            if have != host_mods:
+            if have != self._norm_mods(host_mods):
                 missing.append({"seat": i, "name": s["name"],
                                 "have": have, "need": host_mods})
         return missing
@@ -431,6 +452,8 @@ class GameServer:
             ok, banner = g.do_load(gseat, msg.get("cards", []))
         elif t == "declare":
             ok, banner = g.do_declare(gseat, msg.get("type"))
+            if ok and banner:
+                banner = "{} declared: {}".format(s["name"], banner)
         elif t == "bribe":
             ok, banner = g.do_bribe(gseat, msg.get("gold", 0), msg.get("msg", ""))
             if ok:
@@ -458,6 +481,15 @@ class GameServer:
                 events = res
             else:
                 banner = res[0] if res else "Action failed"
+        elif t == "rumor":
+            ok, res = g.do_sheriff_rumor(gseat)
+            if ok:
+                tp = g.players[res["target"]]
+                _send(s["conn"], {"t": "rumor", "owner": tp.name,
+                                  "type": res["type"]})
+                banner = ""
+            else:
+                banner = res[0] if isinstance(res, (list, tuple)) else res
         elif t == "sheriff_intel":
             ok, res = g.do_sheriff_intel(gseat)
             if ok:
@@ -481,8 +513,10 @@ class GameServer:
             if t == "market_discard":
                 pub = banner.replace("You ", f"{s['name']} ", 1)
             elif t == "load_bag":
-                m = re.search(r"\((\d+) card", banner)
+                m = re.search(r"\((\d+) card(?:s?, pays (\d+) gold tax)?", banner)
                 pub = f"{s['name']} sealed their bag ({m.group(1)} card(s))" if m else banner
+                if m and m.group(2):
+                    pub += f", pays {m.group(2)} gold tax"
             self._broadcast({"t": "banner", "msg": pub})
         self._broadcast_views()
         self._drive_bots()
@@ -611,8 +645,10 @@ class GameServer:
             ok, msg = g.do_load(si, idx)
             if ok:
                 acted = True
-                m = re.search(r"\((\d+) card", msg)
+                m = re.search(r"\((\d+) card(?:s?, pays (\d+) gold tax)?", msg)
                 pub = f"{p.name} sealed their bag ({m.group(1)} card(s))" if m else msg
+                if m and m.group(2):
+                    pub += f", pays {m.group(2)} gold tax"
                 self._broadcast({"t": "banner", "msg": pub})
         self._broadcast_views()
         return acted
@@ -638,8 +674,12 @@ class GameServer:
 
     def _bot_inspect_decision(self):
         g = self.game
-        action, gold = bot.choose_inspect(g, g.sheriff, self._bot_level(g.sheriff),
-                                          self._bot_personality(g.sheriff))
+        if (g._event_active("INSPECTOR") and g.inspected_round == 0
+                and g.inspect_idx == len(g.order) - 1):
+            action, gold = "inspect", None
+        else:
+            action, gold = bot.choose_inspect(g, g.sheriff, self._bot_level(g.sheriff),
+                                              self._bot_personality(g.sheriff))
         if action == "counter":
             ok, events = g.do_counter_bribe(g.sheriff, gold or 0)
         else:
@@ -706,7 +746,8 @@ class GameServer:
             return {"kind": "market_draw", "hand": len(p.hand),
                     "draw_left": g.draw_allow.get(gseat, 0)}
         if g.phase == "LOAD" and gseat != g.sheriff and not p.bag_loaded:
-            return {"kind": "load_bag"}
+            return {"kind": "load_bag", "bag_max": g._bag_max(),
+                    "banned": (g.plague_type if g._event_active("PLAGUE") else None)}
         if g.phase == "DECLARE" and gseat in g.order and p.decl is None:
             return {"kind": "declare", "bag_count": len(p.bag)}
         if g.phase == "INSPECT":
@@ -722,7 +763,9 @@ class GameServer:
                 return {"kind": "inspect", "owner": target.name,
                         "bribe_gold": target.bribe.get("gold", 0),
                         "bribe_msg": target.bribe.get("msg", ""),
-                        "round": target.bribe_round, "max_round": game.BRIBE_MAX_ROUNDS}
+                        "round": target.bribe_round, "max_round": game.BRIBE_MAX_ROUNDS,
+                        "rumor_ok": (g._event_active("RUMORS")
+                                     and not g.rumor_used and bool(target.bag))}
         return None
 
     def _acting_name(self):
@@ -791,6 +834,8 @@ class GameServer:
             "acting": self._acting_name(),
             "acting_phase": self._acting_phase(),
             "black_market": g.black_market_view(),
+            "event": g.current_event or None,
+            "plague": g.plague_type or None,
             "route": g.route_type,
             "intel": self._intel_view(g),
             "pot": g.pot,

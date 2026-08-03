@@ -1,0 +1,10 @@
+{
+  "id": "event_pack",
+  "name": "Twists of Fate Event Pack",
+  "name_zh": "风云变幻事件包",
+  "version": "1.6.7",
+  "description": "Rule mod: one public event is revealed at the start of each round and lasts until round end. 10 events: Bountiful Harvest (+1 market draw), Famine (bag max 4), Plague (one legal good banned from bags), Market Day (truthful pay +1/card), Tax Levy (1 gold to seal), Inspector Visit (must inspect at least 1), Lockdown (contraband fines x2), Amnesty Day (seized without fine), Black Market Boom (smuggled contraband +1 value), Rumors (sheriff peeks 1 card).",
+  "description_zh": "玩法模组：每回合开始公开 1 张事件卡，本回合内生效。10 种事件：丰收之年（市场多摸1张）、饥荒之年（装袋上限4张）、瘟疫蔓延（随机合法货禁运，万能卡也不能变）、集市日（查实赔偿+1金/张）、城门税（装袋缴1金）、官员视察（警长必须至少查1人）、全城封锁（违禁品罚款翻倍）、恩赦日（只没收不罚款）、黑市行情（走私违禁品价值+1）、街头谣言（警长偷看1张牌）。局内聊天栏上方常驻事件详情。",
+  "category": "rules",
+  "enabled": false
+}

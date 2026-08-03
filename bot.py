@@ -107,12 +107,17 @@ def choose_discard(g, seat, level, personality=None):
 # ---------- Load bag: which hand cards go into the bag ----------
 
 def choose_load(g, seat, level, personality=None):
-    """Return hand indices (1-5) to smuggle this round."""
+    """Return hand indices (1-N) to smuggle this round (N = current bag max)."""
     hand = g.players[seat].hand
     rng = g.rng
     params = bot_params(level, personality)
     quest = set(g.quest_types)
-    legal = [i for i, c in enumerate(hand) if not game.is_contraband(c)]
+    bag_max = g._bag_max()
+    banned = g.plague_type if g._event_active("PLAGUE") else None
+    plague_on = g._event_active("PLAGUE")
+    legal = [i for i, c in enumerate(hand)
+             if not game.is_contraband(c) and c["type"] != banned
+             and not (plague_on and c.get("wild"))]
     contra = [i for i, c in enumerate(hand) if game.is_contraband(c)]
 
     def ckey(i):
@@ -129,8 +134,8 @@ def choose_load(g, seat, level, personality=None):
                                                    * params["contra_ratio"]))))
     p_smuggle = min(1.0, {"easy": 0.15, "normal": 0.55, "hard": 0.80}[level]
                     * params["contra_ratio"])
-    want = {"easy": rng.randint(1, 3), "normal": rng.randint(2, 4),
-            "hard": rng.randint(3, 5)}[level]
+    want = min(bag_max, {"easy": rng.randint(1, 3), "normal": rng.randint(2, 4),
+                         "hard": rng.randint(3, 5)}[level])
     if not contra:
         p_smuggle = 0.0
 
@@ -141,7 +146,7 @@ def choose_load(g, seat, level, personality=None):
     chosen = list(contra[:n_c])
 
     # Fill the rest with legal cards of a single (most common) type so the
-    # declaration stays plausible.
+    # declaration stays plausible (never the plague-banned type).
     by_type = {}
     for i in legal:
         by_type.setdefault(hand[i]["type"], []).append(i)
@@ -150,12 +155,12 @@ def choose_load(g, seat, level, personality=None):
         best = max(by_type.values(),
                    key=lambda v: (len(v), sum(hand[i]["value"] for i in v)))
         fill = best
-    target = min(max(len(chosen), want), 5)
+    target = min(max(len(chosen), want), bag_max)
     if len(chosen) < target:
         chosen.extend(fill[:target - len(chosen)])
     if not chosen:
         chosen = [legal[0]] if legal else contra[:1]
-    return chosen[:5]
+    return chosen[:bag_max]
 
 
 # ---------- Declare ----------

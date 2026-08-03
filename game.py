@@ -135,6 +135,15 @@ ACTION_TIMEOUT = 0
 # combined). When reached, only accept/reject (or pass/inspect) remain.
 BRIBE_MAX_ROUNDS = 3
 
+# Twists of Fate Event Pack ("风云变幻事件包"): one public event per round.
+# Each game samples a unique subset of the pool (one per round), then one event
+# is revealed at the start of every round and stays in force until round end.
+# 0 = off. All events are round-scoped and affect everyone equally.
+EVENT_PACK = 0
+EVENT_IDS = ("BOUNTIFUL", "FAMINE", "PLAGUE", "MARKET_DAY", "TAX",
+             "INSPECTOR", "LOCKDOWN", "AMNESTY", "BLACK_BOOM", "RUMORS")
+EVENT_FAMINE_BAG_MAX = 4   # bags hold at most this many cards under Famine
+
 
 def _card_counts(players):
     """Card-count table key: 3-player numbers for <=3 players, 4-6 otherwise."""
@@ -269,6 +278,16 @@ class Game:
         self.market_idx = 0
         self.decl_idx = 0
         self.inspect_idx = 0
+        # Event Pack state (one public event per round)
+        self.event_deck = []
+        self.current_event = None
+        self.plague_type = None
+        self.rumor_used = False
+        self.inspected_round = 0
+        if EVENT_PACK:
+            pool = list(EVENT_IDS)
+            self.rng.shuffle(pool)
+            self.event_deck = pool[:min(len(pool), self.rounds_total)]
         self.discard_hold = {}  # seat -> cards discarded this market turn, not yet placed
         self.draw_allow = {}    # seat -> how many more cards this player may draw this market turn
         self.market_done = {}   # seat -> market turn finished (parallel market)
@@ -326,6 +345,13 @@ class Game:
             p.bribe_first = 0
         self.market_done = {}
         self.intel_used = False
+        self.rumor_used = False
+        self.inspected_round = 0
+        self.current_event = self.event_deck.pop() if self.event_deck else None
+        self.plague_type = None
+        if self.current_event == "PLAGUE":
+            pool = [t for t in LEGAL if GOODS[t]["cnt%d" % _card_counts(self.n)] > 0]
+            self.plague_type = self.rng.choice(pool)
         self.order = [(self.sheriff + i) % self.n for i in range(1, self.n)]
         if ROUTE_BONUS:
             pool = [t for t in LEGAL if GOODS[t]["cnt%d" % _card_counts(self.n)] > 0
@@ -338,6 +364,14 @@ class Game:
         self.market_idx = 0
         self.discard_hold = {}
         self.draw_allow = {}
+
+    def _event_active(self, eid):
+        """True when the Event Pack mod is on and ``eid`` is the round's event."""
+        return bool(EVENT_PACK) and self.current_event == eid
+
+    def _bag_max(self):
+        """Bag capacity for the current round (Famine lowers it)."""
+        return EVENT_FAMINE_BAG_MAX if self._event_active("FAMINE") else BAG_MAX
 
     def market_current(self):
         """First merchant who has not finished their parallel market turn (or None)."""
@@ -385,13 +419,15 @@ class Game:
             if 0 <= i < len(hand):
                 del hand[i]
         self.discard_hold[seat] = chosen
-        self.draw_allow[seat] = len(chosen)
+        self.draw_allow[seat] = len(chosen) + (1 if self._event_active("BOUNTIFUL") else 0)
         legal = sum(1 for c in chosen if not is_contraband(c))
         contra = len(chosen) - legal
         if not chosen:
-            # Nothing discarded -> nothing to draw; end this market turn at once.
-            self.finish_market_turn(seat)
-            return True, ""
+            if not self._event_active("BOUNTIFUL"):
+                # Nothing discarded -> nothing to draw; end this market turn.
+                self.finish_market_turn(seat)
+                return True, ""
+            return True, "Bountiful: you may draw 1 free card"
         return True, (f"You discarded {len(chosen)} card(s) "
                       f"({legal} legal, {contra} contraband). Draw to 6.")
 
@@ -437,8 +473,20 @@ class Game:
             return False, "You already sealed your bag"
         idx = sorted(set(indices))
         chosen = [p.hand[i] for i in idx if 0 <= i < len(p.hand)]
-        if not (BAG_MIN <= len(chosen) <= BAG_MAX):
-            return False, f"Bag must contain {BAG_MIN}-{BAG_MAX} cards"
+        limit = self._bag_max()
+        if not (BAG_MIN <= len(chosen) <= limit):
+            return False, f"Bag must contain {BAG_MIN}-{limit} cards"
+        if self._event_active("PLAGUE") and self.plague_type:
+            for c in chosen:
+                if c.get("wild"):
+                    return False, "Plague: wild cards cannot be loaded this round"
+                if c["type"] == self.plague_type:
+                    return False, (f"Plague: {self.plague_type} is banned "
+                                   "from bags this round")
+        tax = 0
+        if self._event_active("TAX"):
+            tax = min(1, p.gold)
+            p.gold -= tax
         for i in reversed(idx):
             if 0 <= i < len(p.hand):
                 del p.hand[i]
@@ -447,6 +495,9 @@ class Game:
         if all(pp.bag_loaded for i, pp in enumerate(self.players) if i != self.sheriff):
             self.phase = "DECLARE"
             self.decl_idx = 0
+        if tax:
+            return True, (f"Bag sealed ({len(chosen)} card(s), "
+                          f"pays {tax} gold tax)")
         return True, f"Bag sealed ({len(chosen)} card(s))"
 
     # ---------- Declare ----------
@@ -471,6 +522,7 @@ class Game:
             return False, "You can only declare legal goods"
         p = self.players[seat]
         p.decl = {"type": ctype, "count": len(p.bag)}
+        converted = 0
         if WILD_CARDS:
             gd = GOODS[ctype]
             for c in p.bag:
@@ -479,9 +531,13 @@ class Game:
                     c["value"] = gd["value"]
                     c["fine"] = gd["fine"]
                     c.pop("wild", None)
+                    converted += 1
         if not self.declare_pending():
             self.phase = "INSPECT"
             self.inspect_idx = 0
+        if converted:
+            return True, "{0} wild card(s) in the bag count as {1}".format(
+                converted, ctype)
         return True, ""
 
     # ---------- Inspect ----------
@@ -599,6 +655,8 @@ class Game:
         if bribe["msg"]:
             events.append("{0}'s promise: {1}".format(owner.name, bribe["msg"]))
         for c in owner.bag:
+            if self._event_active("BLACK_BOOM") and is_contraband(c):
+                c["value"] = int(c.get("value", 0)) + 1
             events.extend(self._deliver(owner, c))
         self._route_bonus(owner, owner.bag, events)
         events.append("{0} passes unchecked ({1} card(s) enter)".format(
@@ -619,6 +677,31 @@ class Game:
             else:
                 events.append("Round {0} complete. Round {1} starts.".format(
                     self.round_no - 1, self.round_no))
+
+    def do_sheriff_rumor(self, sheriff_seat, target=None):
+        """Rumors event: the sheriff peeks one card of one un-inspected
+        merchant (once per round, private to the sheriff)."""
+        if not self._event_active("RUMORS"):
+            return False, "Rumors event is not active"
+        if self.phase != "INSPECT":
+            return False, "Not the inspection phase"
+        if sheriff_seat != self.sheriff:
+            return False, "You are not the sheriff"
+        if self.rumor_used:
+            return False, "Rumor already used this round"
+        pending = self.order[self.inspect_idx:]
+        if not pending:
+            return False, "No merchants left to peek at"
+        if target is None:
+            target = self.order[self.inspect_idx]
+        if target not in pending:
+            return False, "That merchant was already inspected"
+        p = self.players[target]
+        if not p.bag:
+            return False, "That merchant's bag is empty"
+        card = self.rng.choice(p.bag)
+        self.rumor_used = True
+        return True, {"target": target, "type": card["type"]}
 
     def do_sheriff_intel(self, sheriff_seat):
         """Sheriff Intel mod: pay (total cards still in un-inspected bags) to
@@ -683,13 +766,22 @@ class Game:
             return False, ["The merchant must respond to the counter-offer first"]
         events = []
         if action == "pass":
+            if (self._event_active("INSPECTOR")
+                    and self.inspected_round == 0
+                    and self.inspect_idx == len(self.order) - 1):
+                return False, ["Inspector Visit: the sheriff must inspect at "
+                               "least one merchant this round"]
             self._settle_pass(owner, sheriff, events)
         else:
+            self.inspected_round += 1
             decl_type = owner.decl["type"]
             declared = [c for c in owner.bag if c["type"] == decl_type]
             hidden = [c for c in owner.bag if c["type"] != decl_type]
             if not hidden:
                 penalty = sum(c.get("fine", c["value"]) for c in owner.bag)
+                if self._event_active("MARKET_DAY"):
+                    penalty += len(owner.bag)
+                    events.append("Market Day: sheriff pays +1 gold per card")
                 res = transfer(sheriff, owner, penalty)
                 for c in owner.bag:
                     events.extend(self._deliver(owner, c))
@@ -713,7 +805,14 @@ class Game:
                 if seized:
                     detail = ", ".join("{0}x{1}".format(TYPE_EN.get(t, t), n) for t, n in _counts(seized).items())
                     fine = sum(c.get("fine", c["value"]) for c in seized)
-                    if REPUTATION and owner.reputation >= REP_FINE_AT:
+                    if self._event_active("LOCKDOWN"):
+                        fine *= 2
+                        events.append("Lockdown: contraband fines doubled")
+                    if self._event_active("AMNESTY"):
+                        fine = 0
+                        events.append("Amnesty Day: contraband is seized "
+                                      "without a fine")
+                    if REPUTATION and owner.reputation >= REP_FINE_AT and fine:
                         fine = int(fine * 0.9)
                         events.append("{0}'s reputation discounts the fine by 10%".format(owner.name))
                     res = transfer(owner, sheriff, fine)

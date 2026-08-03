@@ -294,6 +294,8 @@ class App:
         self.lobby_mods_ok = True
         self.lobby_players_mods = []
         self.lobby_mods_toast = ""
+        self.lobby_mod_expanded = None
+        self._last_event = None
         self.lobby_rmods_conflicts = []
         self.bot_personality = "any"
         self.update_scroll = 0
@@ -409,6 +411,10 @@ class App:
             self.selected.discard(i)
         else:
             self.selected.add(i)
+            pm = ((self.view or {}).get("prompt") or {})
+            mx = pm.get("bag_max") if pm.get("kind") == "load_bag" else 5
+            if len(self.selected) > mx:
+                self.selected.discard(i)
         self._rebuild_game_ui()
 
     def _copy_text(self, text):
@@ -509,8 +515,19 @@ class App:
         elif self.screen_name == "lobby":
             self.lobby_rename_input.handle(ev)
             self.rounds_input.handle(ev)
+            if getattr(self, "wild_input_visible", False):
+                self.wild_input.handle(ev)
             for b in self.buttons:
                 b.handle(ev)
+            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                area = pygame.Rect(610, 130, 580, 210)
+                if area.collidepoint(ev.pos):
+                    for r, mid in getattr(self, "lobby_mod_hits", []) or []:
+                        if r.collidepoint(ev.pos):
+                            self.lobby_mod_expanded = (None
+                                                       if self.lobby_mod_expanded == mid
+                                                       else mid)
+                            break
             if ev.type == pygame.MOUSEWHEEL:
                 area = pygame.Rect(610, 130, 580, 210)
                 if area.collidepoint(pygame.mouse.get_pos()):
@@ -571,13 +588,14 @@ class App:
                         self.chat_drag_offset = ev.pos[1] - thumb.y
                     else:
                         # click on the track: page toward the click
+                        # (above the knob = older history, below = newer)
                         target = (thumb.y if thumb is not None
                                   else body.y + body.height // 2)
                         if ev.pos[1] < target:
-                            self.chat_scroll = max(0, self.chat_scroll - 8)
-                        else:
                             self.chat_scroll = min(self.chat_max_scroll,
                                                    self.chat_scroll + 8)
+                        else:
+                            self.chat_scroll = max(0, self.chat_scroll - 8)
             elif ev.type == pygame.MOUSEMOTION and self.chat_drag:
                 body = pygame.Rect(890, 96, 372, 622)
                 thumb = self.chat_thumb
@@ -585,11 +603,13 @@ class App:
                     new_y = ev.pos[1] - self.chat_drag_offset
                     frac = (new_y - body.y) / max(1, body.height - thumb.height)
                     self.chat_scroll = min(self.chat_max_scroll,
-                                           max(0, int(frac * (self.chat_max_scroll + 1))))
+                                           max(0, self.chat_max_scroll
+                                               - int(frac * (self.chat_max_scroll + 1))))
                 else:
                     frac = (ev.pos[1] - body.y) / max(1, body.height)
                     self.chat_scroll = min(self.chat_max_scroll,
-                                           max(0, int(frac * (self.chat_max_scroll + 1))))
+                                           max(0, self.chat_max_scroll
+                                               - int(frac * (self.chat_max_scroll + 1))))
             elif ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
                 self.chat_drag = False
         elif self.screen_name == "over":
@@ -638,6 +658,16 @@ class App:
                     self.selected = set()
                     self.decl_type = None
                 self.view = m
+                ev = m.get("event")
+                if ev and ev != self._last_event:
+                    self._last_event = ev
+                    self._append_chat(self._t("event_announce",
+                                              name=self._t("event_name_" + ev),
+                                              desc=self._t("event_desc_" + ev)),
+                                      COLOR_ACCENT)
+                    if ev == "PLAGUE" and m.get("plague"):
+                        self._append_chat(self._t("event_plague_type",
+                                                  t=self._tn(m["plague"])), COLOR_GOLD)
                 if m.get("phase") == "GAME_OVER":
                     self.screen_name = "over"
                     self._rebuild_over_ui()
@@ -649,6 +679,10 @@ class App:
             elif t == "intel":
                 self._append_chat(self._t("intel_result",
                                           lo=m.get("lo", 0), hi=m.get("hi", 2)),
+                                  COLOR_GOLD)
+            elif t == "rumor":
+                self._append_chat(self._t("rumor_msg", owner=m.get("owner", "?"),
+                                          type=self._tn(m.get("type", "?"))),
                                   COLOR_GOLD)
             elif t == "chat":
                 self._append_chat(f"{m['from']}: {m['msg']}")
@@ -1057,6 +1091,7 @@ class App:
         hand = you.get("hand", [])
 
         sel_enabled = kind in ("market_discard", "load_bag")
+        banned = prompt.get("banned") if kind == "load_bag" else None
         # Hand buttons
         for i, c in enumerate(hand):
             rect = pygame.Rect(40 + (i % 6) * 132, 470 + (i // 6) * 116, 124, 104)
@@ -1082,7 +1117,8 @@ class App:
                 border = COLOR_BORDER_CONTRA
             else:
                 border = COLOR_BORDER_LEGAL
-            b = Button(rect, label, lambda i=i: self._toggle_hand(i), sel_enabled, sel,
+            can_sel = sel_enabled and ct != banned
+            b = Button(rect, label, lambda i=i: self._toggle_hand(i), can_sel, sel,
                        bg=TYPE_COLOR.get(ct), border=border,
                        value=c["value"], sub=sub)
             self.hand_buttons.append(b)
@@ -1109,8 +1145,9 @@ class App:
                                        lambda: self._send({"t": "market_done"})))
         elif kind == "load_bag":
             n = len(self.selected)
+            mx = prompt.get("bag_max", game.BAG_MAX)
             self.buttons.append(Button((40, 610, 240, 42), self._t("btn_seal", n=n),
-                                       lambda: self._load_bag(), enabled=1 <= n <= 5))
+                                       lambda: self._load_bag(), enabled=1 <= n <= mx))
         elif kind == "declare":
             n_leg = len(game.LEGAL)
             step = min(150, (W - 80) // max(n_leg + 1, 1))
@@ -1138,6 +1175,11 @@ class App:
                     (500, 610, 170, 42),
                     self._t("btn_intel", cost=intel.get("cost", 0)),
                     lambda: self._send({"t": "sheriff_intel"})))
+            if prompt.get("rumor_ok"):
+                self.buttons.append(Button(
+                    (680, 610, 150, 42),
+                    self._t("btn_rumor"),
+                    lambda: self._send({"t": "rumor"})))
         elif kind == "counter_bribe":
             can_counter = prompt.get("round", 0) < prompt.get("max_round", 99)
             self.buttons.append(Button((40, 610, 140, 42), self._t("btn_accept"),
@@ -1182,7 +1224,9 @@ class App:
 
     def _load_bag(self):
         cards = sorted(self.selected)
-        if 1 <= len(cards) <= 5:
+        pm = ((self.view or {}).get("prompt") or {})
+        mx = pm.get("bag_max", game.BAG_MAX)
+        if 1 <= len(cards) <= mx:
             self._send({"t": "load_bag", "cards": cards})
             self.selected = set()
 
@@ -1855,28 +1899,35 @@ class App:
             # Full detail rows: name/version/category line + up to 3 wrapped
             # description lines, so the detailed rules are actually readable.
             f13 = get_font(13)
+            expanded = getattr(self, "lobby_mod_expanded", None)
             rows = []
             for m in rmods:
                 desc = ((m.get("description_zh") or m.get("description") or "")
                         if self.lang == "zh" else (m.get("description") or ""))
                 dlines = self._wrap_text(desc, f13, area.width - 16) if desc else []
-                rows.append((m, dlines[:3]))
+                show_all = (m.get("id") == expanded and len(dlines) > 3)
+                rows.append((m, dlines if show_all else dlines[:3]))
             heights = [44 + 17 * max(1, len(dl)) for m, dl in rows]
             total_h = sum(heights)
             max_scroll = max(0, total_h - area.height + 4)
             self.lobby_mods_scroll = min(self.lobby_mods_scroll, max_scroll)
             self.screen.set_clip(area)
+            hits = []
             yy = 134 - self.lobby_mods_scroll
             for (m, dlines), row_h in zip(rows, heights):
                 if yy + row_h - 4 < area.top or yy > area.bottom:
                     yy += row_h
                     continue
+                hits.append((pygame.Rect(610, yy, 560, row_h), m.get("id")))
                 nm = ((m.get("name_zh") or m.get("name") or m.get("id"))
                       if self.lang == "zh" else (m.get("name") or m.get("id")))
                 cat = self._category_label(m.get("category", "rules"))
                 t = get_font(16).render("- {0}  v{1}  {2}".format(nm, m.get("version", "?"), cat),
                                         True, COLOR_TEXT)
                 self.screen.blit(t, (610, yy))
+                marker = "▾" if m.get("id") == expanded else "▸"
+                mt = get_font(14).render(marker, True, COLOR_ACCENT)
+                self.screen.blit(mt, (1170 - mt.get_width(), yy))
                 dy = yy + 24
                 for dl in dlines:
                     d = f13.render(dl, True, COLOR_DIM)
@@ -1885,6 +1936,7 @@ class App:
                 pygame.draw.line(self.screen, (50, 42, 34), (610, yy + row_h - 6),
                                  (1170, yy + row_h - 6))
                 yy += row_h
+            self.lobby_mod_hits = hits
             self.screen.set_clip(None)
             if max_scroll > 0:
                 hint = get_font(13).render(self._t("list_scroll_hint"), True, COLOR_DIM)
@@ -2100,6 +2152,10 @@ class App:
                             n=prompt.get("max_round", 99) - prompt.get("round", 0))
         elif kind == "load_bag":
             instr = self._t("instr_load_bag") + "   " + self._t("selected_n", n=len(self.selected))
+            if prompt.get("banned"):
+                instr += "   " + self._t("event_plague_type", t=self._tn(prompt["banned"]))
+            if prompt.get("bag_max") and prompt.get("bag_max") < game.BAG_MAX:
+                instr += "   " + self._t("load_max_hint", n=prompt.get("bag_max"))
         elif kind:
             instr = {
                 "market_discard": self._t("instr_market_discard") + "   " +
@@ -2143,11 +2199,34 @@ class App:
         for b in self.buttons:
             b.draw(self.screen)
 
-        # Chat panel (scrollable history)
+        # Chat panel (scrollable history) with the round-event strip on top
         pygame.draw.rect(self.screen, COLOR_PANEL, (880, 60, 390, 680), border_radius=8)
         t = get_font(18).render(self._t("chat_title"), True, COLOR_ACCENT)
         self.screen.blit(t, (890, 66))
-        body = pygame.Rect(890, 96, 372, 622)
+        ev_id = v.get("event")
+        ev_h = 0
+        if ev_id:
+            f14, f13 = get_font(14), get_font(13)
+            ename = self._t("event_name_" + ev_id)
+            edesc = self._t("event_desc_" + ev_id)
+            if ev_id == "PLAGUE" and v.get("plague"):
+                edesc += "  " + self._t("event_plague_type", t=self._tn(v["plague"]))
+            title_t = f14.render("◆ " + self._t("event_title") + ": " + ename,
+                                 True, COLOR_ACCENT)
+            dlines = self._wrap_text(edesc, f13, 366)[:4]
+            ev_h = 24 + len(dlines) * 15 + 4
+            ev_top = 88
+            pygame.draw.rect(self.screen, (58, 48, 30), (884, ev_top, 382, ev_h),
+                             border_radius=6)
+            pygame.draw.rect(self.screen, COLOR_ACCENT, (884, ev_top, 382, ev_h),
+                             1, border_radius=6)
+            self.screen.blit(title_t, (892, ev_top + 4))
+            dy = ev_top + 23
+            for dl in dlines:
+                d = f13.render(dl, True, COLOR_DIM)
+                self.screen.blit(d, (892, dy))
+                dy += 15
+        body = pygame.Rect(890, 96 + ev_h + 4, 372, 622 - ev_h - 4)
         font = get_font(16)
         lines = []
         for text, col in self.chat_log:
@@ -2158,23 +2237,26 @@ class App:
         max_scroll = max(0, len(lines) - visible)
         self.chat_max_scroll = max_scroll
         self.chat_scroll = min(int(self.chat_scroll), max_scroll)
-        start = max(0, len(lines) - visible - self.chat_scroll)
         self.screen.set_clip(body)
         y = body.bottom - 4
-        for i in range(len(lines) - 1, start - 1, -1):
-            text, col = lines[i]
-            rt = font.render(text, True, col or COLOR_TEXT)
-            y -= line_h
-            if y < body.top:
-                break
-            self.screen.blit(rt, (body.x, y))
+        if lines:
+            bottom_idx = max(0, len(lines) - 1 - self.chat_scroll)
+            for i in range(bottom_idx, max(-1, bottom_idx - visible), -1):
+                text, col = lines[i]
+                rt = font.render(text, True, col or COLOR_TEXT)
+                y -= line_h
+                if y < body.top:
+                    break
+                self.screen.blit(rt, (body.x, y))
         self.screen.set_clip(None)
         if max_scroll > 0:
             # scrollbar: wider track + visible knob + track-click paging.
+            # Knob sits at the bottom when viewing the newest messages and
+            # moves up as you scroll back through the history.
             track = pygame.Rect(body.right - 13, body.y, 10, body.height)
             pygame.draw.rect(self.screen, (42, 36, 28), track, border_radius=4)
             hh = max(26, int(body.height * visible / max(1, len(lines))))
-            frac = self.chat_scroll / max(1, max_scroll)
+            frac = 1.0 - self.chat_scroll / max(1, max_scroll)
             hy = body.y + int(frac * (body.height - hh))
             knob = pygame.Rect(track.x + 1, hy, track.width - 2, hh)
             pygame.draw.rect(self.screen, COLOR_ACCENT, knob, border_radius=4)

@@ -2,7 +2,7 @@
   "id": "wild_card",
   "name": "Wild Card",
   "name_zh": "万能卡",
-  "version": "1.6.6",
+  "version": "1.6.7",
   "description": "Rule mod: N Wild Cards are shuffled into the deck (host sets the count in the lobby). A Wild Card in a declared bag automatically becomes the declared legal goods. Legal goods, never confiscated.",
   "description_zh": "玩法模组：牌库中加入 n 张万能卡（房主在大厅设置数量）。申报时袋中的万能卡自动变成所申报的合法货物，属于合法品不会被没收。",
   "category": "rules",
