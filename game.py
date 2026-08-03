@@ -141,8 +141,16 @@ BRIBE_MAX_ROUNDS = 3
 # 0 = off. All events are round-scoped and affect everyone equally.
 EVENT_PACK = 0
 EVENT_IDS = ("BOUNTIFUL", "FAMINE", "PLAGUE", "MARKET_DAY", "TAX",
-             "INSPECTOR", "LOCKDOWN", "AMNESTY", "BLACK_BOOM", "RUMORS")
+             "INSPECTOR", "LOCKDOWN", "AMNESTY", "BLACK_BOOM", "RUMORS",
+             "APPLE_BLIGHT", "CHEESE_FEST", "ZERO_TOLERANCE", "DOUBLE_COMP",
+             "SHORTAGE", "PARADE_DAY", "BOUNTY_BOARD", "SHERIFF_PAYDAY",
+             "RUMOR_PRO", "TREASURY")
 EVENT_FAMINE_BAG_MAX = 4   # bags hold at most this many cards under Famine
+EVENT_ZERO_TOL_FINE = 3    # Zero Tolerance: extra fine per seized contraband card
+EVENT_PAYDAY_PER_CARD = 3  # Sheriff Payday: gold to sheriff per confiscated card
+EVENT_PARADE_BONUS = 3     # Parade Day: gold per merchant who smuggled contraband
+EVENT_BOUNTY_REWARD = 5    # Bounty Board: gold for the first smuggled contraband
+EVENT_TREASURY_MULT = 2    # Royal Treasury: bribes may exceed gold by this factor
 
 
 def _card_counts(players):
@@ -284,10 +292,10 @@ class Game:
         self.plague_type = None
         self.rumor_used = False
         self.inspected_round = 0
-        if EVENT_PACK:
-            pool = list(EVENT_IDS)
-            self.rng.shuffle(pool)
-            self.event_deck = pool[:min(len(pool), self.rounds_total)]
+        self.smuggled_round = set()   # merchants who delivered contraband this round
+        self.bounty_taken = False     # Bounty Board one-shot per round
+        self.rumor_peeked = set()     # merchants already peeked (Rumors Pro)
+        self.cheese_noted = False     # Cheese Festival banner already announced
         self.discard_hold = {}  # seat -> cards discarded this market turn, not yet placed
         self.draw_allow = {}    # seat -> how many more cards this player may draw this market turn
         self.market_done = {}   # seat -> market turn finished (parallel market)
@@ -347,7 +355,16 @@ class Game:
         self.intel_used = False
         self.rumor_used = False
         self.inspected_round = 0
-        self.current_event = self.event_deck.pop() if self.event_deck else None
+        self.smuggled_round = set()
+        self.bounty_taken = False
+        self.rumor_peeked = set()
+        self.cheese_noted = False
+        # Events are random each round and never run out; the same event never
+        # appears twice in a row.
+        pool = list(EVENT_IDS) if EVENT_PACK else []
+        if self.current_event and len(pool) > 1 and self.current_event in pool:
+            pool.remove(self.current_event)
+        self.current_event = self.rng.choice(pool) if pool else None
         self.plague_type = None
         if self.current_event == "PLAGUE":
             pool = [t for t in LEGAL if GOODS[t]["cnt%d" % _card_counts(self.n)] > 0]
@@ -409,6 +426,8 @@ class Game:
             return False, "You already discarded this turn"
         idx = sorted(set(indices))
         limit = DISCARD_MAX
+        if self._event_active("SHORTAGE"):
+            limit -= 1
         if REPUTATION and self.players[seat].reputation >= REP_DISCARD_AT:
             limit += 1
         if len(idx) > limit:
@@ -440,7 +459,8 @@ class Game:
             return False, "You already finished the market"
         if source not in (None, "deck"):
             return False, "Only draw from the deck"
-        if len(self.players[seat].hand) >= HAND_SIZE:
+        cap = HAND_SIZE + (1 if self._event_active("BOUNTIFUL") else 0)
+        if len(self.players[seat].hand) >= cap:
             return False, "Your hand is already full"
         if self.draw_allow.get(seat, 0) <= 0:
             return False, "No more draws left"
@@ -483,6 +503,11 @@ class Game:
                 if c["type"] == self.plague_type:
                     return False, (f"Plague: {self.plague_type} is banned "
                                    "from bags this round")
+        if self._event_active("APPLE_BLIGHT"):
+            for c in chosen:
+                if c.get("wild") or c["type"] == "APPLE":
+                    return False, ("Apple Blight: apples (and wild cards) are "
+                                   "banned from bags this round")
         tax = 0
         if self._event_active("TAX"):
             tax = min(1, p.gold)
@@ -553,7 +578,8 @@ class Game:
         p = self.players[seat]
         if p.bribe is not None:
             return False, "A bribe was already offered"
-        gold = max(0, min(int(gold or 0), p.gold))
+        cap = p.gold * EVENT_TREASURY_MULT if self._event_active("TREASURY") else p.gold
+        gold = max(0, min(int(gold or 0), cap))
         p.bribe = {"gold": gold, "msg": (msg or "")[:80]}
         p.bribe_first = gold
         p.sheriff_demand = None
@@ -626,7 +652,8 @@ class Game:
                 return False, ["Counter-offer must be more than your current offer ({0} gold)".format(cur)]
             if gold >= demand:
                 return False, ["Counter-offer must be less than the Sheriff's demand ({0} gold)".format(demand)]
-            if gold > owner.gold:
+            cap = owner.gold * EVENT_TREASURY_MULT if self._event_active("TREASURY") else owner.gold
+            if gold > cap:
                 return False, ["Not enough gold"]
             owner.bribe["gold"] = gold
             owner.sheriff_demand = None
@@ -671,7 +698,7 @@ class Game:
         owner.bribe_first = 0
         self.inspect_idx += 1
         if self.inspect_idx >= len(self.order):
-            self.end_round()
+            self.end_round(events)
             if self.phase == "GAME_OVER":
                 events.append("Game over! See results.")
             else:
@@ -681,13 +708,16 @@ class Game:
     def do_sheriff_rumor(self, sheriff_seat, target=None):
         """Rumors event: the sheriff peeks one card of one un-inspected
         merchant (once per round, private to the sheriff)."""
-        if not self._event_active("RUMORS"):
+        if not (self._event_active("RUMORS") or self._event_active("RUMOR_PRO")):
             return False, "Rumors event is not active"
         if self.phase != "INSPECT":
             return False, "Not the inspection phase"
         if sheriff_seat != self.sheriff:
             return False, "You are not the sheriff"
-        if self.rumor_used:
+        if self._event_active("RUMOR_PRO"):
+            if target in self.rumor_peeked:
+                return False, "You already peeked at that merchant"
+        elif self.rumor_used:
             return False, "Rumor already used this round"
         pending = self.order[self.inspect_idx:]
         if not pending:
@@ -701,6 +731,7 @@ class Game:
             return False, "That merchant's bag is empty"
         card = self.rng.choice(p.bag)
         self.rumor_used = True
+        self.rumor_peeked.add(target)
         return True, {"target": target, "type": card["type"]}
 
     def do_sheriff_intel(self, sheriff_seat):
@@ -782,6 +813,9 @@ class Game:
                 if self._event_active("MARKET_DAY"):
                     penalty += len(owner.bag)
                     events.append("Market Day: sheriff pays +1 gold per card")
+                if self._event_active("DOUBLE_COMP"):
+                    penalty *= 2
+                    events.append("Double Compensation: truthful pay is doubled")
                 res = transfer(sheriff, owner, penalty)
                 for c in owner.bag:
                     events.extend(self._deliver(owner, c))
@@ -812,6 +846,10 @@ class Game:
                         fine = 0
                         events.append("Amnesty Day: contraband is seized "
                                       "without a fine")
+                    if self._event_active("ZERO_TOLERANCE"):
+                        fine += EVENT_ZERO_TOL_FINE * len(seized)
+                        events.append("Zero Tolerance: fines +{0} per seized card".format(
+                            EVENT_ZERO_TOL_FINE))
                     if REPUTATION and owner.reputation >= REP_FINE_AT and fine:
                         fine = int(fine * 0.9)
                         events.append("{0}'s reputation discounts the fine by 10%".format(owner.name))
@@ -823,6 +861,10 @@ class Game:
                             owner.name, len(seized), detail, fine, len(detained)))
                     if res != "pays {0} gold".format(fine):
                         events.append(res)
+                    if self._event_active("SHERIFF_PAYDAY") and seized:
+                        sheriff.gold += EVENT_PAYDAY_PER_CARD * len(seized)
+                        events.append("Sheriff Payday: +{0} gold per confiscated card".format(
+                            EVENT_PAYDAY_PER_CARD))
                 else:
                     events.append(
                         "Inspection of {0}: LIE! {1} mismatched legal card(s) "
@@ -846,11 +888,47 @@ class Game:
             events.append(f"{player.name} delivers {n} {TYPE_EN[self.route_type]} "
                           f"on the trade route: +{bonus} gold")
 
+    def _auto_black_market(self, player, events):
+        """Smuggled contraband auto-claims a quest slot once enough cards are
+        on the stall. Fires immediately on delivery, so the final round can
+        still claim rewards before the game ends."""
+        for ctype in self.quest_types:
+            slot = self.quest_claimed.get(ctype, 0)
+            if slot >= len(self.quest_rewards.get(ctype, [])):
+                continue
+            held = [c for c in player.stand_contra if c["type"] == ctype]
+            if len(held) < BLACK_MARKET_NEED:
+                continue
+            removed = 0
+            kept = []
+            for c in player.stand_contra:
+                if c["type"] == ctype and removed < BLACK_MARKET_NEED:
+                    self.d1.append(c)
+                    removed += 1
+                else:
+                    kept.append(c)
+            player.stand_contra = kept
+            reward = self.quest_rewards[ctype][slot]
+            player.gold += reward
+            player.black_market_cards += 1
+            self.quest_claimed[ctype] = slot + 1
+            self.quest_claimers[ctype][slot] = player.name
+            events.append(
+                "{0} auto-completes BLACK MARKET quest for {1} "
+                "({2} reward): +{3} gold, +Black Market card".format(
+                    player.name, TYPE_EN[ctype],
+                    "1st" if slot == 0 else "2nd", reward))
+
     def _deliver(self, player, card):
         """Deliver a card past the sheriff. Royal cards are announced (visible stall)."""
         events = []
         if card["type"] in LEGAL:
             player.stand_legal.append(card)
+            if self._event_active("CHEESE_FEST") and card["type"] == "CHEESE":
+                card["value"] = int(card.get("value", 0)) + 1
+                if not self.cheese_noted:
+                    self.cheese_noted = True
+                    events.append("Cheese Festival: cheese is worth +1 this round")
         elif card.get("royal"):
             player.stand_contra.append(card)
             events.append(
@@ -865,6 +943,15 @@ class Game:
                         break
         else:
             player.stand_contra.append(card)
+            if self.black_market and card["type"] in self.quest_types:
+                self._auto_black_market(player, events)
+        if is_contraband(card):
+            self.smuggled_round.add(self.players.index(player))
+            if not self.bounty_taken and self._event_active("BOUNTY_BOARD"):
+                self.bounty_taken = True
+                player.gold += EVENT_BOUNTY_REWARD
+                events.append("{0} claims the Bounty Board: +{1} gold".format(
+                    player.name, EVENT_BOUNTY_REWARD))
         return events
 
     def black_market_view(self):
@@ -916,7 +1003,15 @@ class Game:
 
     # ---------- End of round / scoring ----------
 
-    def end_round(self):
+    def end_round(self, events=None):
+        if events is None:
+            events = []
+        if self._event_active("PARADE_DAY") and self.smuggled_round:
+            for seat in sorted(self.smuggled_round):
+                p = self.players[seat]
+                p.gold += EVENT_PARADE_BONUS
+                events.append("Parade Day: {0} smuggled contraband, +{1} gold".format(
+                    p.name, EVENT_PARADE_BONUS))
         for p in self.players:
             target = HAND_SIZE
             if REPUTATION and p.reputation >= REP_HAND_AT:

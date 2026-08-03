@@ -39,8 +39,9 @@ def test_deck():
     print("PASS deck (house numbers: 3p=162/6p=216, royal 6/12)")
 
 
-def test_quest_manual_submit():
-    """Black market: 3 random types x 2 slots, rewards 30-35 / 25-30 shown in advance, manual submit."""
+def test_quest_auto_submit():
+    """Black market: 3 random types x 2 slots, rewards 30-35 / 25-30 shown in
+    advance, quests auto-claim on delivery (manual submit button is a backup)."""
     ps = [game.Player("A"), game.Player("B")]
     g = game.Game(ps, rng=game.random.Random(2))
     g.start_round()
@@ -49,35 +50,36 @@ def test_quest_manual_submit():
         rw = g.quest_rewards[t_]
         assert 30 <= rw[0] <= 35 and 25 <= rw[1] <= 30 and rw[1] < rw[0], (t_, rw)
     t = g.quest_types[0]
-    # not enough cards -> submit rejected
-    ok, err = g.do_black_market_submit(0, t)
-    assert not ok and "Need 3" in err, (ok, err)
-    # wrong slot -> rejected
-    for _ in range(3):
-        g._deliver(ps[0], {"type": t, "value": 8, "fine": 4})
-    assert len(ps[0].stand_contra) == 3
-    ok, err = g.do_black_market_submit(0, t, slot=1)
-    assert not ok, (ok, err)
-    ok, msg = g.do_black_market_submit(0, t, slot=0)
-    assert ok and "1st reward" in msg and f"+{g.quest_rewards[t][0]} gold" in msg, msg
+    # not enough cards -> no claim yet
+    events = []
+    for _ in range(2):
+        events.extend(g._deliver(ps[0], {"type": t, "value": 8, "fine": 4}))
+    assert len(ps[0].stand_contra) == 2
+    assert ps[0].gold == 50
+    # third card auto-claims slot 0 immediately (works in the final round too)
+    events.extend(g._deliver(ps[0], {"type": t, "value": 8, "fine": 4}))
+    assert any("auto-completes" in e for e in events)
     assert ps[0].gold == 50 + g.quest_rewards[t][0]
     assert ps[0].black_market_cards == 1
     assert g.quest_claimed[t] == 1 and g.quest_claimers[t][0] == "A"
     assert len(ps[0].stand_contra) == 0
     assert sum(1 for c in g.d1 if c["type"] == t) >= 3
+    # manual submit after auto-claim is rejected (cards already claimed)
+    ok, err = g.do_black_market_submit(0, t)
+    assert not ok and ("already completed" in err or "Need 3" in err), (ok, err)
     # second slot by another player
+    events2 = []
     for _ in range(3):
-        g._deliver(ps[1], {"type": t, "value": 8, "fine": 4})
-    ok, msg = g.do_black_market_submit(1, t, slot=1)
-    assert ok and "2nd reward" in msg and f"+{g.quest_rewards[t][1]} gold" in msg, msg
+        events2.extend(g._deliver(ps[1], {"type": t, "value": 8, "fine": 4}))
+    assert any("auto-completes" in e for e in events2)
     assert ps[1].gold == 50 + g.quest_rewards[t][1]
-    assert g.quest_claimed[t] == 2
-    # after both slots claimed, no one can submit again
+    assert ps[1].black_market_cards == 1
+    assert g.quest_claimed[t] == 2 and g.quest_claimers[t][1] == "B"
+    # after both slots claimed, no one can claim again
     for _ in range(3):
         g._deliver(ps[0], {"type": t, "value": 8, "fine": 4})
-    ok, err = g.do_black_market_submit(0, t)
-    assert not ok and "already completed" in err, (ok, err)
-    print("PASS black market manual submit (rewards 30-35/25-30, per-slot buttons)")
+    assert g.quest_claimed[t] == 2 and ps[0].gold == 50 + g.quest_rewards[t][0]
+    print("PASS black market auto submit (rewards 30-35/25-30, claims on delivery)")
 
 
 def test_royal_scoring():

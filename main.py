@@ -38,7 +38,7 @@ def main():
 
     ap = argparse.ArgumentParser(description="Sheriff of Nottingham - Lite Online")
     ap.add_argument("--host", action="store_true", help="host a room (this machine is the server)")
-    ap.add_argument("--players", type=int, default=4, help="max players 2-5, default 4")
+    ap.add_argument("--players", type=int, default=4, help="max players 2-6, default 4")
     ap.add_argument("--port", type=int, default=net.DEFAULT_PORT, help=f"listen port, default {net.DEFAULT_PORT}")
     ap.add_argument("--name", default="", help="your name")
     ap.add_argument("--join", default="", help="join a room, e.g. 192.168.1.5:5555")

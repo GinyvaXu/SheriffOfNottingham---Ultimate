@@ -46,15 +46,17 @@ def _enter_inspect(g, merchant=1, sheriff=0):
 
 # ---------------- deck & round flow ----------------
 
-def test_event_deck_size_and_draw():
+def test_event_random_each_round_never_runs_out():
     game.EVENT_PACK = 1
-    g = _game(rounds=9)
-    assert len(g.event_deck) == min(len(game.EVENT_IDS), 9)
-    g.start_round()
-    assert g.current_event in game.EVENT_IDS
-    assert len(g.event_deck) == min(len(game.EVENT_IDS), 9) - 1
-    # no duplicate events in one game
-    assert len(set(g.event_deck)) == len(g.event_deck)
+    g = _game(rounds=20)  # more rounds than events in the pool
+    assert not g.event_deck  # events are no longer pre-drawn
+    seen = set()
+    for _ in range(15):
+        g.start_round()
+        assert g.current_event in game.EVENT_IDS  # every round has an event
+        seen.add(g.current_event)
+    assert g.current_event is not None  # events never run out
+    assert len(seen) >= 5  # random spread over the pool
 
 
 def test_events_off_by_default():
@@ -95,6 +97,61 @@ def test_bountiful_extra_draw():
     assert ok2
     assert g2.draw_allow[1] == 1
     assert g2.phase == "MARKET"
+
+
+def test_bountiful_draw_seventh_card():
+    game.EVENT_PACK = 1
+    g = _with_event("BOUNTIFUL")
+    g.phase = "MARKET"
+    p = g.players[1]
+    p.hand = [{"type": "APPLE", "value": 2, "fine": 2} for _ in range(6)]
+    # discarding 0 cards still grants 1 free draw, and the hand cap is 7
+    ok, _ = g.do_market_discard(1, [])
+    assert ok and g.draw_allow[1] == 1
+    g.deck = [{"type": "CHICKEN", "value": 4, "fine": 2} for _ in range(20)]
+    ok2, _ = g.do_market_draw(1, "deck")
+    assert ok2 and len(p.hand) == 7
+
+
+# ---------------- Black market auto submit ----------------
+
+def test_black_market_auto_submit_on_delivery():
+    game.EVENT_PACK = 0
+    game.SUPER_CONTRA = 0
+    game.REPUTATION = 0
+    game.ROUTE_BONUS = 0
+    g = _game(rounds=1)
+    g.quest_types = ("COFFEE",)
+    g.quest_rewards = {"COFFEE": [30, 25]}
+    g.quest_claimed = {"COFFEE": 0}
+    g.quest_claimers = {"COFFEE": [None, None]}
+    p = g.players[1]
+    gold0 = p.gold
+    events = []
+    for _ in range(3):
+        events.extend(g._deliver(p, {"type": "COFFEE", "value": 6, "fine": 4}))
+    assert p.stand_contra == []
+    assert p.gold == gold0 + 30
+    assert g.quest_claimed["COFFEE"] == 1
+    assert any("auto-completes" in e for e in events)
+
+
+def test_black_market_auto_submit_needs_three():
+    game.EVENT_PACK = 0
+    game.SUPER_CONTRA = 0
+    game.REPUTATION = 0
+    game.ROUTE_BONUS = 0
+    g = _game(rounds=1)
+    g.quest_types = ("COFFEE",)
+    g.quest_rewards = {"COFFEE": [30, 25]}
+    g.quest_claimed = {"COFFEE": 0}
+    p = g.players[1]
+    gold0 = p.gold
+    for _ in range(2):
+        g._deliver(p, {"type": "COFFEE", "value": 6, "fine": 4})
+    assert len(p.stand_contra) == 2
+    assert p.gold == gold0  # not claimed yet
+    assert g.quest_claimed["COFFEE"] == 0
 
 
 # ---------------- Famine ----------------

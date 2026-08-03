@@ -441,7 +441,8 @@ class GameServer:
             if not ok and banner == "Your hand is already full":
                 ok, banner = True, ""          # hand full => market turn auto-ends
                 g.finish_market_turn(gseat)
-            elif ok and (len(g.players[gseat].hand) >= game.HAND_SIZE
+            elif ok and (len(g.players[gseat].hand) >=
+                         game.HAND_SIZE + (1 if g._event_active("BOUNTIFUL") else 0)
                          or g.draw_allow.get(gseat, 0) <= 0):
                 g.finish_market_turn(gseat)
         elif t == "market_done":
@@ -623,8 +624,9 @@ class GameServer:
             return False
         if msg:
             self._broadcast({"t": "banner", "msg": msg.replace("You ", f"{p.name} ", 1)})
+        cap = game.HAND_SIZE + (1 if g._event_active("BOUNTIFUL") else 0)
         for _ in range(8):
-            if len(p.hand) >= game.HAND_SIZE or g.draw_allow.get(seat, 0) <= 0:
+            if len(p.hand) >= cap or g.draw_allow.get(seat, 0) <= 0:
                 break
             if g.phase != "MARKET" or g.market_done.get(seat):
                 break
@@ -742,12 +744,17 @@ class GameServer:
         p = g.players[gseat]
         if g.phase == "MARKET" and gseat in g.order and not g.market_done.get(gseat):
             if not self._discarded.get(gseat):
-                return {"kind": "market_discard", "max_discard": min(game.DISCARD_MAX, len(p.hand))}
+                lim = game.DISCARD_MAX - (1 if g._event_active("SHORTAGE") else 0)
+                return {"kind": "market_discard", "max_discard": min(lim, len(p.hand))}
             return {"kind": "market_draw", "hand": len(p.hand),
                     "draw_left": g.draw_allow.get(gseat, 0)}
         if g.phase == "LOAD" and gseat != g.sheriff and not p.bag_loaded:
+            banned_ev = ("PLAGUE" if g._event_active("PLAGUE")
+                         else ("APPLE_BLIGHT" if g._event_active("APPLE_BLIGHT") else None))
             return {"kind": "load_bag", "bag_max": g._bag_max(),
-                    "banned": (g.plague_type if g._event_active("PLAGUE") else None)}
+                    "banned": (g.plague_type if banned_ev == "PLAGUE"
+                               else ("APPLE" if banned_ev else None)),
+                    "banned_event": banned_ev}
         if g.phase == "DECLARE" and gseat in g.order and p.decl is None:
             return {"kind": "declare", "bag_count": len(p.bag)}
         if g.phase == "INSPECT":
@@ -895,7 +902,8 @@ class GameServer:
             if not ok and banner == "Your hand is already full":
                 ok, banner = True, ""
                 g.finish_market_turn(gseat)
-            elif ok and (len(g.players[gseat].hand) >= game.HAND_SIZE
+            elif ok and (len(g.players[gseat].hand) >=
+                         game.HAND_SIZE + (1 if g._event_active("BOUNTIFUL") else 0)
                          or g.draw_allow.get(gseat, 0) <= 0):
                 g.finish_market_turn(gseat)
         elif t == "load_bag":

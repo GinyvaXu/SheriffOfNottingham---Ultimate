@@ -31,6 +31,9 @@ COLOR_RED = (205, 92, 72)
 COLOR_GREEN = (116, 182, 116)
 COLOR_GOLD = (226, 168, 52)
 COLOR_CONTRA_TEXT = (208, 128, 96)
+COLOR_PURPLE = (176, 132, 216)   # black market / quests
+COLOR_ORANGE = (226, 132, 66)    # seizures / inspections
+COLOR_PINK = (226, 122, 168)     # smuggling / royal goods
 COLOR_SELECT = (250, 250, 250)
 COLOR_BORDER_LEGAL = (84, 138, 92)
 COLOR_BORDER_CONTRA = (186, 74, 64)
@@ -284,7 +287,7 @@ class App:
         self.host_addr = None
         self.name = name or self._t("default_name")
         self.port = port
-        self.players = max(2, min(5, players))
+        self.players = max(2, min(6, players))
         self.royal = royal
         self.black_market = black_market
         self.screen_name = "menu"
@@ -383,6 +386,23 @@ class App:
 
     def _tn(self, t):
         return lang.tname(t, self.lang)
+
+    def _banner_color(self, en):
+        """Pick a chat color for a system banner based on its content."""
+        t = (en or "").lower()
+        if "black market" in t or "quest" in t:
+            return COLOR_PURPLE
+        if any(k in t for k in ("seized", "confiscat", "detained", " lie",
+                                "truth", "inspection", "banned", "caught")):
+            return COLOR_ORANGE
+        if any(k in t for k in ("bribe", " bribe", "fine", "reward", " tax",
+                                "gold", " pays ", "pays the", "tax")):
+            return COLOR_GOLD
+        if "smuggl" in t or "royal" in t:
+            return COLOR_PINK
+        if "round" in t or "game over" in t or "market" in t:
+            return COLOR_ACCENT
+        return COLOR_DIM
 
     def _msg(self, text):
         return lang.translate(text, self.lang)
@@ -675,7 +695,8 @@ class App:
                     self.screen_name = "game"
                     self._rebuild_game_ui()
             elif t == "banner":
-                self._append_chat("◆ " + self._msg(m.get("msg", "")), COLOR_ACCENT)
+                en = m.get("msg", "")
+                self._append_chat("◆ " + self._msg(en), self._banner_color(en))
             elif t == "intel":
                 self._append_chat(self._t("intel_result",
                                           lo=m.get("lo", 0), hi=m.get("hi", 2)),
@@ -909,7 +930,7 @@ class App:
         self._save_profile_name()
         name = self.name_input.text.strip() or self._t("default_name")
         players = self._parse_int(self.players_input.text, 4)
-        players = max(2, min(5, players))
+        players = max(2, min(6, players))
         self._create_room(players, self.port, name)
 
     def _rebuild_lobby_ui(self):
@@ -2153,7 +2174,10 @@ class App:
         elif kind == "load_bag":
             instr = self._t("instr_load_bag") + "   " + self._t("selected_n", n=len(self.selected))
             if prompt.get("banned"):
-                instr += "   " + self._t("event_plague_type", t=self._tn(prompt["banned"]))
+                if prompt.get("banned_event") == "APPLE_BLIGHT":
+                    instr += "   " + self._t("event_apple_blight_type")
+                else:
+                    instr += "   " + self._t("event_plague_type", t=self._tn(prompt["banned"]))
             if prompt.get("bag_max") and prompt.get("bag_max") < game.BAG_MAX:
                 instr += "   " + self._t("load_max_hint", n=prompt.get("bag_max"))
         elif kind:
