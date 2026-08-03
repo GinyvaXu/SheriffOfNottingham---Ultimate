@@ -22,6 +22,11 @@ BUILTIN_AVATARS = [
 ]
 MAX_CUSTOM_B64 = 512 * 1024   # safety cap for the stored/transmitted image
 
+# Window settings presets (the GUI canvas is a fixed 1280x800 logical size
+# that is scaled onto the real window, so bigger windows = roomier layouts).
+PRESET_SIZES = [(1280, 800), (1600, 900), (1920, 1080), (2560, 1440)]
+WIN_MIN, WIN_MAX = (1024, 640), (3840, 2160)
+
 
 def app_dir():
     base = os.environ.get("APPDATA") or os.path.expanduser("~")
@@ -38,7 +43,9 @@ def profile_path():
 
 
 def default_profile():
-    return {"name": "", "avatar": DEFAULT_AVATAR, "custom_avatar": None}
+    return {"name": "", "avatar": DEFAULT_AVATAR, "custom_avatar": None,
+            "win_w": PRESET_SIZES[0][0], "win_h": PRESET_SIZES[0][1],
+            "fullscreen": False, "borderless": False}
 
 
 def load_profile():
@@ -54,6 +61,16 @@ def load_profile():
         ca = data.get("custom_avatar")
         if isinstance(ca, str) and 0 < len(ca) < MAX_CUSTOM_B64:
             p["custom_avatar"] = ca
+        # Window settings (missing/old profiles fall back to the defaults)
+        try:
+            w = int(data.get("win_w") or 0)
+            h = int(data.get("win_h") or 0)
+        except (TypeError, ValueError):
+            w = h = 0
+        p["win_w"] = max(WIN_MIN[0], min(WIN_MAX[0], w or PRESET_SIZES[0][0]))
+        p["win_h"] = max(WIN_MIN[1], min(WIN_MAX[1], h or PRESET_SIZES[0][1]))
+        p["fullscreen"] = bool(data.get("fullscreen"))
+        p["borderless"] = bool(data.get("borderless"))
     except (OSError, ValueError):
         pass
     return p

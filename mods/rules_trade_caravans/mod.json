@@ -2,7 +2,7 @@
   "id": "trade_caravans",
   "name": "Trade Caravans",
   "name_zh": "车队商路",
-  "version": "1.6.9",
+  "version": "1.7.0",
   "description": "Each round reveals a public trade route; every legal card of that good that passes the sheriff earns +4 gold on delivery. Rewards reading the market.",
   "description_zh": "每回合公开一条商路，该种法定商品每张成功过关额外 +4 金。鼓励根据公开信息规划走私。",
   "category": "rules",

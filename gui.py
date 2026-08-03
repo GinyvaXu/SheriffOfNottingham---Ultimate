@@ -5,11 +5,13 @@ import os
 import sys
 import threading
 import time
+import webbrowser
 
 import pygame
 
 import game
 import gfx
+import history
 import lang
 import market
 import mods
@@ -57,6 +59,12 @@ TYPE_COLOR = {
     "ROYAL_CHICKEN": (128, 75, 37),
     "BLACK_MARKET": (222, 172, 62),
 }
+
+# Canvas mouse position (in logical 1280x800 coords), updated every frame so
+# hover states work when the real window is scaled/letterboxed.
+_CANVAS_MOUSE = (0, 0)
+
+SPONSOR_URL = "https://www.ifdian.net/a/Ginyva?utm_source=copylink&utm_medium=link"
 
 _FONT_CACHE = {}
 _SYS_FONT_PATHS = [
@@ -162,7 +170,7 @@ class Button:
         return False
 
     def draw(self, surf):
-        hover = self.enabled and self.rect.collidepoint(pygame.mouse.get_pos())
+        hover = self.enabled and self.rect.collidepoint(_CANVAS_MOUSE)
         if self.bg is not None:
             if hover and self.enabled:
                 color = tuple(min(255, c + 26) for c in self.bg)
@@ -266,7 +274,8 @@ class App:
                  mod_names=None, mod_errors=None, mod_list=None):
         pygame.init()
         pygame.display.set_caption(lang.UI.get(lang_name, lang.UI["zh"])["title"])
-        self.screen = pygame.display.set_mode((W, H))
+        self.profile = profile.load_profile()
+        self._apply_window_mode()
         try:
             icon_path = gfx.asset_path("icon.png")
             if icon_path:
@@ -291,6 +300,9 @@ class App:
         self.royal = royal
         self.black_market = black_market
         self.screen_name = "menu"
+        self._last_drawn_screen = None
+        self._fade_t = 0.0
+        self._history_recorded = False
         self.view = None
         self.lobby = None
         self.lobby_rules_mods = []
@@ -328,7 +340,6 @@ class App:
         self.mod_names = list(mod_names or [])
         self.mod_errors = list(mod_errors or [])
         self.mod_list = list(mod_list or [])
-        self.profile = profile.load_profile()
         self.avatar_id = self.profile.get("avatar") or profile.DEFAULT_AVATAR
         self.custom_avatar = self.profile.get("custom_avatar")
         self.avatar_toast = ""
@@ -365,6 +376,10 @@ class App:
         self.chat_input = TextInput((910, 730, 250, 30), self._t("ph_chat"))
         self.gold_input = TextInput((40, 668, 110, 32), self._t("ph_gold"))
         self.msg_input = TextInput((170, 668, 300, 32), self._t("ph_note"))
+        self.settings_w_input = TextInput((470, 318, 120, 34), self._t("ph_w"))
+        self.settings_h_input = TextInput((610, 318, 120, 34), self._t("ph_h"))
+        self.settings_w_input.text = str(self.profile.get("win_w", W))
+        self.settings_h_input.text = str(self.profile.get("win_h", H))
         self.buttons = []
         self.hand_buttons = []
 
@@ -458,6 +473,8 @@ class App:
         self.rounds_input.placeholder = self._t("ph_rounds")
         self.lobby_rename_input.placeholder = self._t("ph_name")
         self.avatar_path_input.placeholder = self._t("avatar_path_hint")
+        self.settings_w_input.placeholder = self._t("ph_w")
+        self.settings_h_input.placeholder = self._t("ph_h")
         pygame.display.set_caption(self._t("title"))
         if self.screen_name == "menu":
             self._rebuild_menu_ui()
@@ -465,12 +482,94 @@ class App:
             self._rebuild_mods_ui()
         elif self.screen_name == "market":
             self._rebuild_market_ui()
+        elif self.screen_name == "settings":
+            self._rebuild_settings_ui()
+        elif self.screen_name == "history":
+            self._rebuild_history_ui()
         elif self.screen_name == "update":
             self._rebuild_update_ui()
         elif self.screen_name == "lobby":
             self._rebuild_lobby_ui()
         elif self.screen_name == "game":
             self._rebuild_game_ui()
+
+    # ---------- Window & scaling ----------
+
+    def _apply_window_mode(self):
+        """(Re)create the real window from profile settings.
+
+        The GUI is drawn on a fixed 1280x800 logical canvas (``self.screen``)
+        which is scaled onto the real window (``self.window``) with black
+        letterbox bars, so every screen benefits from a bigger window.
+        """
+        p = self.profile
+        try:
+            w = max(profile.WIN_MIN[0], min(profile.WIN_MAX[0],
+                                            int(p.get("win_w") or W)))
+            h = max(profile.WIN_MIN[1], min(profile.WIN_MAX[1],
+                                            int(p.get("win_h") or H)))
+        except (TypeError, ValueError):
+            w, h = W, H
+        flags = 0
+        if p.get("fullscreen"):
+            flags |= pygame.FULLSCREEN
+            try:
+                info = pygame.display.Info()
+                if info.current_w > 0 and info.current_h > 0:
+                    w, h = info.current_w, info.current_h
+            except Exception:  # noqa: BLE001
+                pass
+        if p.get("borderless"):
+            flags |= pygame.NOFRAME
+        self.window = pygame.display.set_mode((w, h), flags)
+        self.win_w, self.win_h = self.window.get_size()
+        self.scale = min(self.win_w / W, self.win_h / H)
+        self.offset_x = int((self.win_w - W * self.scale) / 2)
+        self.offset_y = int((self.win_h - H * self.scale) / 2)
+        self.screen = pygame.Surface((W, H))
+        return True
+
+    def _to_canvas(self, pos):
+        """Map a real-window mouse position to logical canvas coordinates."""
+        try:
+            return (int((pos[0] - self.offset_x) / self.scale),
+                    int((pos[1] - self.offset_y) / self.scale))
+        except (ZeroDivisionError, TypeError, ValueError):
+            return (int(pos[0]), int(pos[1]))
+
+    def _mouse(self):
+        return self._to_canvas(pygame.mouse.get_pos())
+
+    def _apply_window_settings(self):
+        """Read the custom W/H inputs, save, and recreate the window."""
+        try:
+            w = max(profile.WIN_MIN[0], min(profile.WIN_MAX[0],
+                                            int(self.settings_w_input.text.strip() or 0)))
+            h = max(profile.WIN_MIN[1], min(profile.WIN_MAX[1],
+                                            int(self.settings_h_input.text.strip() or 0)))
+        except ValueError:
+            w, h = self.profile.get("win_w", W), self.profile.get("win_h", H)
+        self.profile["win_w"], self.profile["win_h"] = w, h
+        self.profile["fullscreen"] = bool(self.profile.get("fullscreen"))
+        self.profile["borderless"] = bool(self.profile.get("borderless"))
+        profile.save_profile(self.profile)
+        self.settings_w_input.text = str(w)
+        self.settings_h_input.text = str(h)
+        self._apply_window_mode()
+        self.menu_note = self._t("settings_applied")
+        self._rebuild_settings_ui()
+
+    def _set_window_size(self, w, h):
+        self.profile["win_w"], self.profile["win_h"] = w, h
+        self._rebuild_settings_ui()
+
+    def _toggle_fullscreen(self):
+        self.profile["fullscreen"] = not self.profile.get("fullscreen")
+        self._rebuild_settings_ui()
+
+    def _toggle_borderless(self):
+        self.profile["borderless"] = not self.profile.get("borderless")
+        self._rebuild_settings_ui()
 
     # ---------- Room ----------
 
@@ -531,7 +630,7 @@ class App:
                 b.handle(ev)
             if ev.type == pygame.MOUSEWHEEL:
                 news = pygame.Rect(70, 522, 1130, 248)
-                if news.collidepoint(pygame.mouse.get_pos()):
+                if news.collidepoint(_CANVAS_MOUSE):
                     self.menu_news_scroll = max(0, self.menu_news_scroll - int(ev.y) * 28)
         elif self.screen_name == "lobby":
             self.lobby_rename_input.handle(ev)
@@ -551,7 +650,7 @@ class App:
                             break
             if ev.type == pygame.MOUSEWHEEL:
                 area = pygame.Rect(610, 130, 580, 210)
-                if area.collidepoint(pygame.mouse.get_pos()):
+                if area.collidepoint(_CANVAS_MOUSE):
                     self.lobby_mods_scroll = max(0, self.lobby_mods_scroll - int(ev.y) * 32)
         elif self.screen_name == "mods":
             if ev.type == pygame.MOUSEWHEEL:
@@ -568,6 +667,16 @@ class App:
             for b in self.buttons:
                 b.handle(ev)
             for b in self.market_row_buttons:
+                b.handle(ev)
+        elif self.screen_name == "settings":
+            self.settings_w_input.handle(ev)
+            self.settings_h_input.handle(ev)
+            for b in self.buttons:
+                b.handle(ev)
+        elif self.screen_name == "history":
+            if ev.type == pygame.MOUSEWHEEL:
+                self.history_scroll = max(0, self.history_scroll - int(ev.y) * 36)
+            for b in self.buttons:
                 b.handle(ev)
         elif self.screen_name == "update":
             if ev.type == pygame.MOUSEWHEEL:
@@ -690,9 +799,15 @@ class App:
                         self._append_chat(self._t("event_plague_type",
                                                   t=self._tn(m["plague"])), COLOR_GOLD)
                 if m.get("phase") == "GAME_OVER":
+                    if not self._history_recorded:
+                        self._history_recorded = True
+                        history.add_record(m.get("scores") or [],
+                                           m.get("rounds_total", 0),
+                                           len(m.get("players") or []))
                     self.screen_name = "over"
                     self._rebuild_over_ui()
                 else:
+                    self._history_recorded = False
                     self.screen_name = "game"
                     self._rebuild_game_ui()
             elif t == "banner":
@@ -821,13 +936,20 @@ class App:
                 lambda k=key: self._pick_avatar(k),
                 icon=gfx.avatar_surface({"kind": "builtin", "id": key}, 52),
                 highlight=(key == self.avatar_id and not self.custom_avatar)))
-        # Tools grid
-        for i, (label, cb) in enumerate([
-                (self._t("btn_mods"), self._open_mods),
-                (self._t("btn_market"), self._open_market),
-                (self._t("btn_update"), self._open_update),
-                (self._t("btn_quit"), lambda: setattr(self, "done", True))]):
-            self.buttons.append(Button((890, 240 + i * 72, 280, 52), label, cb))
+        # Tools grid (2 columns so History / Settings / Sponsor also fit)
+        tools = [
+            (self._t("btn_mods"), self._open_mods, None),
+            (self._t("btn_market"), self._open_market, None),
+            (self._t("btn_update"), self._open_update, None),
+            (self._t("btn_history"), self._open_history, None),
+            (self._t("btn_settings"), self._open_settings, None),
+            (self._t("btn_sponsor"), self._open_sponsor, (176, 124, 44)),
+            (self._t("btn_quit"), lambda: setattr(self, "done", True), None),
+        ]
+        for i, (label, cb, bg) in enumerate(tools):
+            col, row = i % 2, i // 2
+            self.buttons.append(Button((890 + col * 162, 232 + row * 56, 148, 46),
+                                       label, cb, bg=bg))
         self.buttons.append(Button((W - 170, 20, 140, 40), self._t("btn_lang"), self._toggle_lang))
         self.avatar_path_input.placeholder = self._t("avatar_path_hint")
 
@@ -1328,6 +1450,116 @@ class App:
             pass
         self.done = True
 
+    # ---------- Settings ----------
+
+    def _rebuild_settings_ui(self):
+        self.buttons = []
+        p = self.profile
+        for i, (w, h) in enumerate(profile.PRESET_SIZES):
+            x = 120 + (i % 2) * 200
+            y = 216 + (i // 2) * 58
+            active = (int(p.get("win_w") or 0) == w and int(p.get("win_h") or 0) == h
+                      and not p.get("fullscreen"))
+            self.buttons.append(Button((x, y, 186, 46),
+                                       self._t("settings_w_h", w=w, h=h),
+                                       lambda w=w, h=h: self._set_window_size(w, h),
+                                       highlight=active))
+        fs = self._t("settings_on" if p.get("fullscreen") else "settings_off")
+        bl = self._t("settings_on" if p.get("borderless") else "settings_off")
+        self.buttons.append(Button((120, 362, 386, 46),
+                                   self._t("settings_fullscreen", s=fs),
+                                   self._toggle_fullscreen, highlight=p.get("fullscreen")))
+        self.buttons.append(Button((120, 418, 386, 46),
+                                   self._t("settings_borderless", s=bl),
+                                   self._toggle_borderless, highlight=p.get("borderless")))
+        self.buttons.append(Button((120, 500, 240, 46), self._t("settings_apply"),
+                                   self._apply_window_settings))
+        self.buttons.append(Button((W - 180, 700, 150, 44), self._t("btn_back"),
+                                   self._back_to_menu))
+
+    def _draw_settings(self):
+        self._screen_header(self._t("settings_title"))
+        self._panel(self.screen, (90, 140, 470, 430), self._t("settings_window"))
+        t = get_font(17).render(self._t("settings_size_preset"), True, COLOR_ACCENT)
+        self.screen.blit(t, (120, 186))
+        t = get_font(17).render(self._t("settings_custom"), True, COLOR_ACCENT)
+        self.screen.blit(t, (120, 290))
+        t = get_font(15).render("W:", True, COLOR_TEXT)
+        self.screen.blit(t, (440, 300))
+        t = get_font(15).render("H:", True, COLOR_TEXT)
+        self.screen.blit(t, (590, 300))
+        self.settings_w_input.rect = pygame.Rect(470, 318, 120, 34)
+        self.settings_h_input.rect = pygame.Rect(610, 318, 120, 34)
+        self.settings_w_input.draw(self.screen)
+        self.settings_h_input.draw(self.screen)
+        t = get_font(15).render(self._t("settings_note"), True, COLOR_DIM)
+        self.screen.blit(t, (120, 560))
+        if self.menu_note:
+            t = get_font(16).render(self.menu_note, True, COLOR_GREEN)
+            self.screen.blit(t, (120, 600))
+        for b in self.buttons:
+            b.draw(self.screen)
+
+    # ---------- History ----------
+
+    def _rebuild_history_ui(self):
+        self.buttons = []
+        self.buttons.append(Button((90, 104, 170, 42), self._t("history_clear"),
+                                   self._clear_history))
+        self.buttons.append(Button((W - 180, 700, 150, 44), self._t("btn_back"),
+                                   self._back_to_menu))
+
+    def _clear_history(self):
+        if history.clear_history():
+            self.history_records = []
+            self.history_toast = self._t("history_cleared")
+            self._rebuild_history_ui()
+
+    def _draw_history(self):
+        self._screen_header(self._t("history_title"))
+        if getattr(self, "history_toast", ""):
+            t = get_font(16).render(self.history_toast, True, COLOR_GREEN)
+            self.screen.blit(t, (280, 116))
+        recs = getattr(self, "history_records", []) or []
+        for b in self.buttons:
+            b.draw(self.screen)
+        if not recs:
+            t = get_font(22).render(self._t("history_empty"), True, COLOR_DIM)
+            self.screen.blit(t, t.get_rect(center=(W // 2, 380)))
+            return
+        area = pygame.Rect(80, 160, W - 160, 520)
+        self.screen.set_clip(area)
+        y = area.y + 2 - getattr(self, "history_scroll", 0)
+        for rec in recs:
+            players = rec.get("players") or []
+            bh = 34 + len(players) * 22 + 12
+            pygame.draw.rect(self.screen, (56, 48, 38), (90, y, W - 180, bh),
+                             border_radius=8)
+            pygame.draw.rect(self.screen, COLOR_GOLD, (90, y, W - 180, bh),
+                             1, border_radius=8)
+            meta = self._t("history_meta", time=rec.get("ts", ""),
+                           n=rec.get("n", 0), r=rec.get("rounds", 0))
+            t = get_font(16).render(meta, True, COLOR_ACCENT)
+            self.screen.blit(t, (106, y + 8))
+            win = self._t("history_winner", name=rec.get("winner", "?"))
+            t = get_font(16).render(win, True, COLOR_GREEN)
+            self.screen.blit(t, (W - 250 - t.get_width(), y + 8))
+            yy = y + 34
+            for pl in players:
+                line = self._t("history_rank",
+                               rank=pl.get("rank", 0), name=pl.get("name", "?"),
+                               final=pl.get("final", 0), value=pl.get("value", 0),
+                               gold=pl.get("gold", 0), bonus=pl.get("bonus", 0))
+                _out_blit(self.screen, get_font(15), line, COLOR_TEXT, (106, yy))
+                yy += 22
+            y += bh + 10
+        self.screen.set_clip(None)
+        max_scroll = max(0, y - area.y - area.height)
+        self.history_scroll = min(self.history_scroll, max_scroll)
+        if max_scroll > 0:
+            hint = get_font(13).render(self._t("menu_news_hint"), True, COLOR_DIM)
+            self.screen.blit(hint, (W - 120 - hint.get_width(), 132))
+
     # ---------- Mods management ----------
 
     def _open_mods(self):
@@ -1586,6 +1818,25 @@ class App:
 
     # ---------- Update ----------
 
+    def _open_sponsor(self):
+        try:
+            webbrowser.open(SPONSOR_URL)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _open_settings(self):
+        self.screen_name = "settings"
+        self.settings_w_input.text = str(self.profile.get("win_w", W))
+        self.settings_h_input.text = str(self.profile.get("win_h", H))
+        self._rebuild_settings_ui()
+
+    def _open_history(self):
+        self.screen_name = "history"
+        self.history_records = history.load_history()
+        self.history_scroll = 0
+        self.history_toast = ""
+        self._rebuild_history_ui()
+
     def _open_update(self):
         self.screen_name = "update"
         self._rebuild_update_ui()
@@ -1766,6 +2017,12 @@ class App:
     # ---------- Drawing ----------
 
     def draw(self):
+        global _CANVAS_MOUSE
+        _CANVAS_MOUSE = self._mouse()
+        name = self.screen_name
+        if name != self._last_drawn_screen:
+            self._last_drawn_screen = name
+            self._fade_t = 0.0
         if self.screen_name == "game":
             self.screen.fill(COLOR_BG)
         else:
@@ -1776,6 +2033,10 @@ class App:
             self._draw_mods()
         elif self.screen_name == "market":
             self._draw_market()
+        elif self.screen_name == "settings":
+            self._draw_settings()
+        elif self.screen_name == "history":
+            self._draw_history()
         elif self.screen_name == "update":
             self._draw_update()
         elif self.screen_name == "lobby":
@@ -1784,6 +2045,20 @@ class App:
             self._draw_game()
         elif self.screen_name == "over":
             self._draw_over()
+        # Screen-change animation: fade in from black (~0.3s).
+        if self._fade_t is not None:
+            if self._fade_t >= 1.0:
+                self._fade_t = None
+            else:
+                self._fade_t = min(1.0, self._fade_t + 0.06)
+                ov = pygame.Surface((W, H), pygame.SRCALPHA)
+                ov.fill((0, 0, 0, int(255 * (1.0 - self._fade_t))))
+                self.screen.blit(ov, (0, 0))
+        # Scale the logical canvas onto the real window (letterboxed).
+        self.window.fill((0, 0, 0))
+        scaled = pygame.transform.scale(
+            self.screen, (max(1, int(W * self.scale)), max(1, int(H * self.scale))))
+        self.window.blit(scaled, (self.offset_x, self.offset_y))
 
     def _draw_menu(self):
         title = get_font(46).render(self._t("title"), True, COLOR_ACCENT)
@@ -2024,10 +2299,10 @@ class App:
         if contra_text:
             px += _out_blit(surf, f15, contra_text, COLOR_CONTRA_TEXT, (px, y))
 
-    def _draw_stall_colored(self, x, y, w, p):
+    def _draw_stall_colored(self, x, y, w, p, font_size=14):
         """Stall row in the player panel: every goods type uses its own color
         (colors come from the goods table, so reskin mods can change them)."""
-        font = get_font(14)
+        font = get_font(font_size)
         px = x
         prefix = font.render(self._t("stall"), True, COLOR_DIM)
         self.screen.blit(prefix, (px, y))
@@ -2108,9 +2383,10 @@ class App:
         # Player panels (multi-line nameplates)
         plist = v.get("players", [])
         n = len(plist)
+        crowded = n >= 5
         pw = min(215, 860 // max(n, 1) - 10)
         you = v.get("you") or {}
-        py, ph = 78, 152
+        py, ph = 78, (146 if crowded else 152)
         for i, p in enumerate(plist):
             x = 20 + i * (pw + 10)
             pygame.draw.rect(self.screen, COLOR_PANEL, (x, py, pw, ph), border_radius=8)
@@ -2120,13 +2396,15 @@ class App:
             if i == v.get("sheriff"):
                 self.screen.blit(gfx.badge(20), (nx, py + 8))
                 nx += 24
-            self.screen.blit(gfx.avatar_surface(p.get("avatar"), 34), (x + pw - 42, py + 8))
-            t = get_font(17).render(tag + p["name"], True, col)
+            av = 30 if crowded else 34
+            self.screen.blit(gfx.avatar_surface(p.get("avatar"), av), (x + pw - av - 8, py + 8))
+            t = get_font(16 if crowded else 17).render(tag + p["name"], True, col)
             self.screen.blit(t, (nx, py + 6))
             yy = py + 30
             gold = self._t("gold_hand", g=p["gold"], h=p["hand_count"])
             self.screen.blit(gfx.coin(16), (x + 8, yy + 2))
-            yy = self._draw_block(self.screen, gold, x + 26, yy, get_font(15),
+            yy = self._draw_block(self.screen, gold, x + 26, yy,
+                                  get_font(14 if crowded else 15),
                                   COLOR_TEXT, max(40, pw - 56)) + 2
             if p.get("bag_size"):
                 yy = self._draw_block(self.screen,
@@ -2145,11 +2423,12 @@ class App:
                 self.screen.blit(t, (x + 8, yy)); yy += 20
             if p.get("decl"):
                 d = p["decl"]
-                _out_blit(self.screen, get_font(15),
+                _out_blit(self.screen, get_font(14 if crowded else 15),
                           self._t("declared", t=self._tn(d["type"]), c=d["count"]),
                           TYPE_COLOR.get(d["type"], COLOR_GREEN), (x + 8, yy))
                 yy += 20
-            yy = self._draw_stall_colored(x + 8, yy, pw - 16, p) + 4
+            yy = self._draw_stall_colored(x + 8, yy, pw - 16, p,
+                                          font_size=13 if crowded else 14) + 4
             if i == self.my_seat:
                 mine = you.get("stand_contra") or []
                 counts = {}
@@ -2226,7 +2505,8 @@ class App:
         bag_t = self._t("bag_info", n=len(bag), types=types, c=contra_n)
         t = get_font(18).render(bag_t, True, COLOR_TEXT)
         bm = v.get("black_market")
-        bm_h = (36 + len(bm.get("types") or []) * 44) if (bm and bm.get("types")) else 0
+        bm_h = (self._bm_panel_h(len(bm.get("types") or []))
+                if (bm and bm.get("types")) else 0)
         bag_y = 268 + bm_h + 10 if bm_h else 424
         self.screen.blit(t, (40, bag_y))
         # Hand & buttons
@@ -2313,6 +2593,10 @@ class App:
             if pk == "bribe":
                 self.msg_input.draw(self.screen)
 
+    def _bm_panel_h(self, n_types):
+        """Height of the black-market quest panel for n quest groups."""
+        return 36 + max(0, n_types) * 46
+
     def _draw_black_market(self):
         v = self.view or {}
         bm = v.get("black_market")
@@ -2321,35 +2605,57 @@ class App:
         types = bm.get("types") or []
         if not types:
             return
-        n_groups = len(types)
         need = bm.get("need") or game.BLACK_MARKET_NEED
         rewards = bm.get("rewards") or {}
         claimed = bm.get("claimed") or {}
         claimers = bm.get("claimers") or {}
-        pygame.draw.rect(self.screen, COLOR_PANEL, (20, 268, 860, 36 + n_groups * 44),
-                         border_radius=8)
-        t = get_font(16).render(self._t("bm_title"), True, COLOR_ACCENT)
-        self.screen.blit(t, (30, 276))
-        y = 292
+        hgt = self._bm_panel_h(len(types))
+        px, py = 20, 268
+        pygame.draw.rect(self.screen, (54, 44, 32), (px, py, 860, hgt),
+                         border_radius=10)
+        pygame.draw.rect(self.screen, COLOR_BORDER_ROYAL, (px, py, 860, hgt),
+                         2, border_radius=10)
+        self.screen.blit(gfx.coin(18), (px + 12, py + 8))
+        _out_blit(self.screen, get_font(16),
+                  self._t("bm_title") + "    " + self._t("bm_need_hint", n=need),
+                  COLOR_ACCENT, (px + 36, py + 7))
+        y = py + 36
         for t_ in types:
-            _out_blit(self.screen, get_font(15), self._tn(t_),
-                      TYPE_COLOR.get(t_, COLOR_TEXT), (30, y))
-            cl = claimers.get(t_, [None, None]) or [None, None]
-            c = claimed.get(t_, 0)
-            rw = rewards.get(t_, [0, 0]) or [0, 0]
-            for si in range(2):
-                tx = 110 + si * 280
-                if si < c and cl[si]:
-                    tt = get_font(14).render(
-                        self._t("bm_done1" if si == 0 else "bm_done2", n=cl[si]),
-                        True, COLOR_GREEN)
-                else:
-                    tt = get_font(14).render(
-                        self._t("bm_slot1" if si == 0 else "bm_slot2", g=rw[si]),
-                        True, COLOR_TEXT)
-                self.screen.blit(tt, (tx, y))
+            self._draw_bm_row(y, t_, rewards.get(t_, [0, 0]) or [0, 0],
+                              claimed.get(t_, 0),
+                              claimers.get(t_, [None, None]) or [None, None])
             # Progress stays secret: nobody sees who is close to a quest.
-            y += 44
+            y += 46
+
+    def _draw_bm_row(self, y, type_key, rw, claimed_count, cl):
+        """One black-market task row: a colored goods chip + two reward slots."""
+        px, pw = 20, 860
+        col = TYPE_COLOR.get(type_key, COLOR_TEXT)
+        chip = pygame.Rect(px + 12, y + 5, 104, 36)
+        dark = tuple(max(18, c - 70) for c in col)
+        pygame.draw.rect(self.screen, dark, chip, border_radius=8)
+        pygame.draw.rect(self.screen, col, chip, 2, border_radius=8)
+        _out_blit(self.screen, get_font(15), self._tn(type_key), (255, 250, 235),
+                  (chip.x + 10, chip.y + 9))
+        slot_w = (pw - 124 - 30) // 2
+        for si in range(2):
+            sx = px + 124 + si * (slot_w + 10)
+            slot = pygame.Rect(sx, y + 2, slot_w, 42)
+            done = si < claimed_count and cl[si]
+            if done:
+                fill, border = (50, 96, 58), COLOR_GREEN
+            else:
+                fill, border = (46, 38, 30), (COLOR_BORDER_ROYAL if si == 0 else (152, 140, 120))
+            pygame.draw.rect(self.screen, fill, slot, border_radius=8)
+            pygame.draw.rect(self.screen, border, slot, 2, border_radius=8)
+            star = get_font(15).render("★" if si == 0 else "☆", True, border)
+            self.screen.blit(star, (sx + 8, y + 11))
+            if done:
+                txt = self._t("bm_done1" if si == 0 else "bm_done2", n=cl[si])
+            else:
+                txt = self._t("bm_slot1" if si == 0 else "bm_slot2", g=rw[si])
+            _out_blit(self.screen, get_font(14), txt,
+                      COLOR_GREEN if done else COLOR_TEXT, (sx + 30, y + 13))
 
 
     def _draw_over(self):
@@ -2479,6 +2785,12 @@ class App:
                 if ev.type == pygame.QUIT:
                     self.done = True
                 else:
+                    if ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP,
+                                   pygame.MOUSEMOTION):
+                        try:
+                            ev.pos = self._to_canvas(ev.pos)
+                        except Exception:  # noqa: BLE001 - keep default pos
+                            pass
                     self.handle_event(ev)
             self.process_client_msgs()
             self.draw()

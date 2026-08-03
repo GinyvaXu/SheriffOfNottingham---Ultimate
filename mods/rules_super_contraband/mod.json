@@ -2,7 +2,7 @@
   "id": "super_contraband",
   "name": "Super Contraband",
   "name_zh": "超级违禁品",
-  "version": "1.6.9",
+  "version": "1.7.0",
   "description": "Rule mod: adds one Super card per contraband type - triple the value and triple the fine (e.g. Super Coffee 18g / Super Crossbow 27g). Behave exactly like contraband when inspected.",
   "description_zh": "玩法模组：每种违禁品加入一张超级违禁品，价值与罚金均为该类普通违禁品的三倍（如超级咖啡价值18、超级弩价值27）。被检查时按普通违禁品同样没收并罚款。",
   "category": "rules",
