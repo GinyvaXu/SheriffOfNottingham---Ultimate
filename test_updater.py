@@ -120,6 +120,23 @@ class CheckTest(unittest.TestCase):
             r = updater.check_for_update()
         self.assertEqual(r["error"], "network")
 
+    def test_parallel_picks_highest_version(self):
+        """A stale CDN cache (old version) must never mask a fresher source."""
+        sources = [("stale", "http://fake/a.json"), ("fresh", "http://fake/b.json")]
+        mock.patch.object(updater, "custom_mirror", return_value={}).start()
+        with mock.patch.object(updater, "MANIFEST_SOURCES", sources):
+            mans = {
+                "http://fake/a.json": {"version": "1.0.0", "url": "http://x/a.exe"},
+                "http://fake/b.json": {"version": "99.0.0", "url": "http://x/b.exe"},
+            }
+            with mock.patch.object(updater, "fetch_manifest",
+                                   side_effect=lambda url, t: mans[url]):
+                r = updater.check_for_update()
+        self.assertTrue(r["available"])
+        self.assertEqual(r["version"], "99.0.0")
+        self.assertEqual(r["url"], "http://x/b.exe")
+        self.assertIsNone(r["error"])
+
     def test_release_api_fallback(self):
         api = ("api", "http://fake/api/releases/latest")
         mock.patch.object(updater, "custom_mirror", return_value={}).start()

@@ -36,15 +36,16 @@ import subprocess
 import sys
 import tempfile
 import time
+import concurrent.futures
 import urllib.error
 import urllib.request
 
 import version
 
 # Community GitHub acceleration proxies that stay reachable from mainland
-# China when api/raw.githubusercontent.com are slow or blocked. The list is
-# tried in order until one works; entries die and new ones appear over time,
-# so keeping several is what makes the auto-update resilient.
+# China when api/raw.githubusercontent.com are slow or blocked. Entries die
+# and new ones appear over time, so keeping several is what makes the
+# auto-update resilient.
 GITHUB_PROXIES = [
     "https://ghfast.top/",
     "https://gh-proxy.com/",
@@ -54,12 +55,22 @@ GITHUB_PROXIES = [
 
 _RAW_MANIFEST = ("https://raw.githubusercontent.com/GinyvaXu/"
                  "SheriffOfNottingham---Ultimate/main/update.json")
+_JS_MANIFEST = ("https://cdn.jsdelivr.net/gh/GinyvaXu/"
+                "SheriffOfNottingham---Ultimate@main/update.json")
 MANIFEST_SOURCES = [
     ("ghfast", "https://ghfast.top/" + _RAW_MANIFEST),
     ("raw", _RAW_MANIFEST),
     ("ghproxynet", "https://ghproxy.net/" + _RAW_MANIFEST),
     ("llkk", "https://gh.llkk.cc/" + _RAW_MANIFEST),
     ("ghproxycom", "https://gh-proxy.com/" + _RAW_MANIFEST),
+    # jsDelivr CDN is generally fast and reliable from mainland China (cdn /
+    # fastly / gcore edges). Its GitHub cache can lag a few minutes behind a
+    # fresh commit, so the parallel check always picks the highest version.
+    ("jsdelivr", _JS_MANIFEST),
+    ("jsdelivr-fastly", _JS_MANIFEST.replace("cdn.jsdelivr.net",
+                                             "fastly.jsdelivr.net")),
+    ("jsdelivr-gcore", _JS_MANIFEST.replace("cdn.jsdelivr.net",
+                                            "gcore.jsdelivr.net")),
     ("api", "https://api.github.com/repos/GinyvaXu/"
             "SheriffOfNottingham---Ultimate/releases/latest"),
 ]
@@ -177,42 +188,89 @@ def custom_mirror():
         return {}
 
 
+def _result_from_manifest(man, current):
+    """Build a success status dict from an update.json manifest."""
+    latest = str(man.get("version", "") or "").strip()
+    if not latest:
+        raise ValueError("empty manifest")
+    return {"available": is_newer(latest, current),
+            "version": latest, "current": current,
+            "url": str(man.get("url", "") or ""),
+            "notes": str(man.get("notes", "") or "").replace("\r", ""),
+            "notes_zh": str(man.get("notes_zh", "") or "").replace("\r", ""),
+            "error": None, "detail": ""}
+
+
+def _probe_one(kind, url, per_timeout, current):
+    """Try one manifest source; returns (ok, result_or_error)."""
+    try:
+        if kind == "api":
+            data = _fetch(url, per_timeout)
+            latest, dl_url, notes = _from_release_api(json.loads(data.decode("utf-8")))
+            return True, {"available": is_newer(latest, current),
+                          "version": latest, "current": current,
+                          "url": dl_url, "notes": notes, "notes_zh": "",
+                          "error": None, "detail": ""}
+        man = fetch_manifest(url, per_timeout)
+        return True, _result_from_manifest(man, current)
+    except Exception as e:  # noqa: BLE001 - a broken source must not crash
+        return False, e
+
+
+def _check_parallel(current, timeout):
+    """Probe every built-in source in parallel with one shared deadline.
+
+    All sources are queried concurrently, each with a small per-request
+    timeout, so the whole check finishes in roughly ``timeout`` seconds even
+    when several mirrors are slow or dead. The manifest with the HIGHEST
+    version wins, which also protects against a stale CDN cache reporting an
+    older build as the latest.
+    """
+    per = max(3.0, min(6.0, timeout / 2.0))
+    ex = concurrent.futures.ThreadPoolExecutor(
+        max_workers=min(10, len(MANIFEST_SOURCES)))
+    futures = [ex.submit(_probe_one, kind, url, per, current)
+               for kind, url in MANIFEST_SOURCES]
+    results, errs = [], []
+    try:
+        for f in concurrent.futures.as_completed(futures, timeout=timeout):
+            ok, payload = f.result()
+            if ok:
+                results.append(payload)
+            else:
+                errs.append(payload)
+    except concurrent.futures.TimeoutError:
+        pass
+    ex.shutdown(wait=False)  # stragglers finish in the background
+    if results:
+        best = max(results, key=lambda r: parse_version(r["version"]))
+        return best
+    last = errs[-1] if errs else TimeoutError("all sources timed out")
+    return {"available": False, "version": "", "current": current,
+            "url": "", "notes": "", "notes_zh": "",
+            "error": error_code(last), "detail": str(last)}
+
+
 def check_for_update(timeout=_DEFAULT_TIMEOUT):
     """Return a status dict, never raises.
 
     Keys: available, version, current, url, notes, error, detail.
     ``error`` is None on success or one of "timeout" / "network" / "unknown".
+
+    A user-configured custom mirror (mirror.json) is checked first and wins
+    immediately when it works; otherwise every built-in source (GitHub
+    proxies, raw GitHub, jsDelivr CDN edges, releases API) is probed in
+    parallel with a single deadline and the highest reported version wins.
     """
     current = version.__version__
-    last_err = None
     custom = custom_mirror().get("manifest") or ""
-    sources = MANIFEST_SOURCES
     if custom:
-        sources = [("custom", custom)] + list(MANIFEST_SOURCES)
-    for kind, url in sources:
         try:
-            if kind == "api":
-                data = _fetch(url, timeout)
-                latest, dl_url, notes = _from_release_api(json.loads(data.decode("utf-8")))
-                notes_zh = ""
-            else:
-                man = fetch_manifest(url, timeout)
-                latest = str(man.get("version", "") or "").strip()
-                if not latest:
-                    raise ValueError("empty manifest")
-                dl_url = str(man.get("url", "") or "")
-                notes = str(man.get("notes", "") or "").replace("\r", "")
-                notes_zh = str(man.get("notes_zh", "") or "").replace("\r", "")
-            return {"available": is_newer(latest, current),
-                    "version": latest, "current": current,
-                    "url": dl_url, "notes": notes, "notes_zh": notes_zh,
-                    "error": None, "detail": ""}
-        except Exception as e:  # noqa: BLE001 - never crash the UI thread
-            last_err = e
-            continue
-    return {"available": False, "version": "", "current": current,
-            "url": "", "notes": "", "notes_zh": "", "error": error_code(last_err),
-            "detail": str(last_err) if last_err else ""}
+            man = fetch_manifest(custom, timeout)
+            return _result_from_manifest(man, current)
+        except Exception:  # noqa: BLE001 - fall through to built-in sources
+            pass
+    return _check_parallel(current, timeout)
 
 
 def download_dir():
