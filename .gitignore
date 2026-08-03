@@ -14,6 +14,7 @@ smoke2*.png
 # project planning docs (local only, not published)
 00_*.md
 01_*.md
+02_*.md
 
 # editor / os
 .vscode/

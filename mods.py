@@ -140,6 +140,21 @@ class ModAPI:
         lang.TYPE_ZH[key] = name_zh
         return (old_en, name_en, name_zh)
 
+    def set_type_name(self, key, name_en, name_zh):
+        """Set the display name of a card type (rule-mod added cards such as
+        WILD or SUPER_*). Unlike rename() this does not register a reskin map;
+        server messages use the canonical English name and the client's
+        translator picks it up from TYPE_EN/TYPE_ZH automatically."""
+        key = str(key).upper()
+        self._sync_names(key, name_en, name_zh)
+        return (name_en, name_zh)
+
+    def set_type_color(self, key, color):
+        """Set the card color of a type (rule-mod added cards)."""
+        key = str(key).upper()
+        gui.TYPE_COLOR[key] = tuple(color)
+        return tuple(color)
+
     def set_avatar_colors(self, key, bg, fg, accent):
         """Reskin mod hook: recolor one builtin avatar.
 

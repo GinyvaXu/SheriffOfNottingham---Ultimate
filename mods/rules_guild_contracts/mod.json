@@ -2,7 +2,7 @@
   "id": "guild_contracts",
   "name": "Guild Contracts",
   "name_zh": "行会契约",
-  "version": "1.6.5",
+  "version": "1.6.6",
   "description": "At game start every player gets 2 secret contracts (1 in 3-player games) to deliver a fixed amount of a legal good; fulfilled contracts pay 10+need*value gold at game end.",
   "description_zh": "开局每人抽取 2 张秘密契约（3 人局 1 张），要求累计运进指定法定商品数量，完成后结算 10+需求数*卡牌价值 的金币奖励。",
   "category": "rules",

@@ -98,6 +98,21 @@ BRIBE_POT_MODE = "split"
 # passes the sheriff. 0 = off.
 ROUTE_BONUS = 0
 
+# Wild Cards: N extra legal wild cards shuffled into the deck (host sets the
+# count in the lobby). A wild card sitting in a declared bag automatically
+# becomes the declared goods type. 0 = off.
+WILD_CARDS = 0
+
+# Sheriff Intel: once per round the sheriff may pay gold (equal to the total
+# number of cards still in the un-inspected bags) to learn how many of those
+# are contraband - reported only as a bucket (0-2, 3-5, ...). Only usable while
+# at least 2 merchants are still to be inspected. 0 = off.
+SHERIFF_INTEL = 0
+
+# Super Contraband: one special card per contraband type whose value and fine
+# are triple the base card. Behave exactly like contraband when inspected.
+SUPER_CONTRA = 0
+
 # Guild Contracts: number of secret contracts dealt at game start (0 = off).
 # Each contract = (legal type, needed delivered count, gold reward).
 GUILD_CONTRACTS = 0
@@ -141,13 +156,21 @@ def make_deck(rng=None, royal=True, players=3):
             cards.extend([{"type": rt, "value": d["value"], "fine": d["fine"],
                            "royal": True, "royal_type": d["of"], "equals": d["equals"]}
                           for _ in range(n)])
+    if WILD_CARDS > 0:
+        cards.extend([{"type": "WILD", "value": 0, "fine": 0, "wild": True}
+                      for _ in range(WILD_CARDS)])
+    if SUPER_CONTRA:
+        for t in CONTRABAND:
+            d = GOODS[t]
+            cards.append({"type": "SUPER_" + t, "value": d["value"] * 3,
+                          "fine": d["fine"] * 3, "super": True, "of": t})
     rng.shuffle(cards)
     return cards
 
 
 def is_contraband(card):
-    """A royal goods card behaves as contraband (cannot be declared, confiscated)."""
-    return card.get("royal") or card["type"] in CONTRABAND
+    """A royal / super card behaves as contraband (cannot be declared, confiscated)."""
+    return card.get("royal") or card.get("super") or card["type"] in CONTRABAND
 
 
 def _counts(cards):
@@ -255,6 +278,7 @@ class Game:
         self.quest_rewards = {}   # type -> [slot0 gold, slot1 gold]
         self.quest_claimed = {}   # type -> number of claimed slots (0/1/2)
         self.quest_claimers = {}  # type -> [name or None, name or None]
+        self.intel_used = False         # sheriff intel used this round (rule mod)
         if black_market:
             pool = list(CONTRABAND)
             self.rng.shuffle(pool)
@@ -301,6 +325,7 @@ class Game:
             p.bribe_round = 0
             p.bribe_first = 0
         self.market_done = {}
+        self.intel_used = False
         self.order = [(self.sheriff + i) % self.n for i in range(1, self.n)]
         if ROUTE_BONUS:
             pool = [t for t in LEGAL if GOODS[t]["cnt%d" % _card_counts(self.n)] > 0
@@ -387,7 +412,10 @@ class Game:
             self._ensure_deck(1)
             if not self.deck:
                 return False, "No cards left to draw"
-        self.players[seat].hand.append(self.deck.pop())
+        card = self._draw_card(self.players[seat])
+        if card is None:
+            return False, "No cards left to draw"
+        self.players[seat].hand.append(card)
         self.draw_allow[seat] -= 1
         return True, ""
 
@@ -443,6 +471,14 @@ class Game:
             return False, "You can only declare legal goods"
         p = self.players[seat]
         p.decl = {"type": ctype, "count": len(p.bag)}
+        if WILD_CARDS:
+            gd = GOODS[ctype]
+            for c in p.bag:
+                if c.get("wild"):
+                    c["type"] = ctype
+                    c["value"] = gd["value"]
+                    c["fine"] = gd["fine"]
+                    c.pop("wild", None)
         if not self.declare_pending():
             self.phase = "INSPECT"
             self.inspect_idx = 0
@@ -584,6 +620,56 @@ class Game:
                 events.append("Round {0} complete. Round {1} starts.".format(
                     self.round_no - 1, self.round_no))
 
+    def do_sheriff_intel(self, sheriff_seat):
+        """Sheriff Intel mod: pay (total cards still in un-inspected bags) to
+        learn a bucketed count (0-2 / 3-5 / ...) of contraband remaining."""
+        if not SHERIFF_INTEL:
+            return False, "Sheriff intel is disabled"
+        if self.phase != "INSPECT":
+            return False, "Not the inspection phase"
+        if sheriff_seat != self.sheriff:
+            return False, "You are not the sheriff"
+        if self.intel_used:
+            return False, "Intel already used this round"
+        pending = self.order[self.inspect_idx:]
+        if len(pending) < 2:
+            return False, "Need at least 2 merchants left to inspect"
+        cost = sum(len(self.players[i].bag) for i in pending)
+        sheriff = self.players[sheriff_seat]
+        if sheriff.gold < cost:
+            return False, "Not enough gold: intel costs {0}".format(cost)
+        sheriff.gold -= cost
+        self.intel_used = True
+        contra = sum(1 for i in pending
+                     for c in self.players[i].bag if is_contraband(c))
+        lo = (contra // 3) * 3
+        hi = lo + 2
+        return True, {"cost": cost, "lo": lo, "hi": hi}
+
+    def _legal_probability(self, p):
+        """Merchant Reputation mod: chance of drawing a legal card from the
+        deck. Positive reputation raises it (capped at 90%), negative lowers it
+        (legal floor 30%, i.e. contraband odds stay below the 90% mirror)."""
+        r = p.reputation
+        if r > 0:
+            return min(0.5 + 0.08 * r, 0.9)
+        if r < 0:
+            return max(0.5 + 0.05 * r, 0.25)
+        return 0.5
+
+    def _draw_card(self, p):
+        """Draw one card, biased by reputation when the mod is on."""
+        if REPUTATION:
+            want_legal = self.rng.random() < self._legal_probability(p)
+            for i, c in enumerate(self.deck):
+                if is_contraband(c) != want_legal:
+                    return self.deck.pop(i)
+        if not self.deck:
+            self._ensure_deck(1)
+            if not self.deck:
+                return None
+        return self.deck.pop()
+
     def do_inspect_decision(self, sheriff_seat, action):
         if self.phase != "INSPECT":
             return False, ["Not the inspection phase"]
@@ -625,7 +711,7 @@ class Game:
                 self.d1.extend(seized)
                 self.d1.extend(detained)
                 if seized:
-                    detail = ", ".join("{0}x{1}".format(TYPE_EN[t], n) for t, n in _counts(seized).items())
+                    detail = ", ".join("{0}x{1}".format(TYPE_EN.get(t, t), n) for t, n in _counts(seized).items())
                     fine = sum(c.get("fine", c["value"]) for c in seized)
                     if REPUTATION and owner.reputation >= REP_FINE_AT:
                         fine = int(fine * 0.9)
@@ -643,7 +729,7 @@ class Game:
                         "Inspection of {0}: LIE! {1} mismatched legal card(s) "
                         "detained, no fine".format(owner.name, len(detained)))
                 self._route_bonus(owner, delivered, events)
-                if REPUTATION:
+                if REPUTATION and seized:
                     owner.reputation -= 1
                     events.append("{0}'s reputation -1 -> {1}".format(owner.name, owner.reputation))
         self._next_merchant(owner, events)
@@ -738,9 +824,10 @@ class Game:
                 target += 1
             while len(p.hand) < target:
                 self._ensure_deck(1)
-                if not self.deck:
+                card = self._draw_card(p)
+                if card is None:
                     break
-                p.hand.append(self.deck.pop())
+                p.hand.append(card)
         if self.round_no >= self.rounds_total:
             self.phase = "GAME_OVER"
         else:
@@ -762,7 +849,7 @@ class Game:
                     royal_eff[c["royal_type"]] += c.get("equals", 2)
                     royal_cards += 1
                 else:
-                    contra_count[c["type"]] += 1
+                    contra_count[c.get("of", c["type"])] += 1
                 delivered.append(c)
             value = sum(c["value"] for c in delivered) + p.gold
             rows.append({

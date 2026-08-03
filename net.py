@@ -335,7 +335,7 @@ class GameServer:
                         _send(s["conn"], {"t": "error",
                                           "msg": "All players must be ready to start"})
                         return
-                    self._start_game(joined, msg.get("rounds"))
+                    self._start_game(joined, msg.get("rounds"), msg.get("wild"))
                 elif t == "add_bot" and seat == 0:
                     self._add_bot(str(msg.get("level", "normal")).lower(),
                                   msg.get("personality") or None)
@@ -371,7 +371,9 @@ class GameServer:
                     self.seats[i] = None
         self._broadcast_lobby()
 
-    def _start_game(self, joined, rounds=None):
+    def _start_game(self, joined, rounds=None, wild=None):
+        if wild is not None:
+            game.WILD_CARDS = max(0, int(wild or 0))
         players = [game.Player(self.seats[i]["name"],
                                avatar=self.seats[i].get("avatar")) for i in joined]
         self.game = game.Game(players, rng=self.rng, royal=self.royal,
@@ -456,6 +458,16 @@ class GameServer:
                 events = res
             else:
                 banner = res[0] if res else "Action failed"
+        elif t == "sheriff_intel":
+            ok, res = g.do_sheriff_intel(gseat)
+            if ok:
+                self._broadcast({"t": "banner", "msg":
+                                 "{0} pays {1} gold for sheriff intel".format(
+                                     s["name"], res["cost"])})
+                _send(s["conn"], {"t": "intel", "lo": res["lo"], "hi": res["hi"]})
+                banner = ""
+            else:
+                banner = res[0] if isinstance(res, (list, tuple)) else res
         elif t == "black_market_submit":
             ok, banner = g.do_black_market_submit(gseat, msg.get("type"), msg.get("slot"))
         if not ok:
@@ -673,7 +685,8 @@ class GameServer:
         def _card(c):
             return {"type": c["type"], "value": c["value"],
                     "fine": c.get("fine", c["value"]),
-                    "equals": c.get("equals"), "of": c.get("royal_type")}
+                    "equals": c.get("equals"), "of": c.get("royal_type"),
+                    "super": c.get("super")}
         return {
             "hand": [_card(c) for c in p.hand],
             "bag": [_card(c) for c in p.bag],
@@ -779,6 +792,7 @@ class GameServer:
             "acting_phase": self._acting_phase(),
             "black_market": g.black_market_view(),
             "route": g.route_type,
+            "intel": self._intel_view(g),
             "pot": g.pot,
             "time_left": self._time_left(),
         }
@@ -790,6 +804,22 @@ class GameServer:
             pub["you"] = self._private_view(gseat)
             pub["prompt"] = self._prompt_for(gseat)
         return pub
+
+    def _intel_view(self, g):
+        """Sheriff Intel mod: what the sheriff may buy this moment (or None)."""
+        try:
+            on = bool(game.SHERIFF_INTEL)
+        except AttributeError:
+            on = False
+        if not on or g.phase != "INSPECT":
+            return None
+        pending = g.order[g.inspect_idx:]
+        return {
+            "used": bool(g.intel_used),
+            "cost": sum(len(g.players[i].bag) for i in pending),
+            "available": (len(pending) >= 2 and not g.intel_used),
+            "remaining": len(pending),
+        }
 
     def _time_left(self):
         """Seconds left on the current action (Night Market mod) or None."""

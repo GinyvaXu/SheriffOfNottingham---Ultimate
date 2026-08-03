@@ -354,6 +354,7 @@ class App:
         self.players_input = TextInput((300, 330, 300, 36), self._t("ph_players"))
         self.join_input = TextInput((300, 398, 300, 36), self._t("ph_join"))
         self.rounds_input = TextInput((W // 2 - 260, 545, 110, 36), self._t("ph_rounds"))
+        self.wild_input = TextInput((W // 2 - 260, 545, 110, 36), self._t("ph_wild"))
         self.lobby_rename_input = TextInput((W // 2 - 260, 480, 200, 36), self._t("ph_name"))
         self.chat_input = TextInput((910, 730, 250, 30), self._t("ph_chat"))
         self.gold_input = TextInput((40, 668, 110, 32), self._t("ph_gold"))
@@ -645,6 +646,10 @@ class App:
                     self._rebuild_game_ui()
             elif t == "banner":
                 self._append_chat("◆ " + self._msg(m.get("msg", "")), COLOR_ACCENT)
+            elif t == "intel":
+                self._append_chat(self._t("intel_result",
+                                          lo=m.get("lo", 0), hi=m.get("hi", 2)),
+                                  COLOR_GOLD)
             elif t == "chat":
                 self._append_chat(f"{m['from']}: {m['msg']}")
             elif t == "status":
@@ -887,6 +892,8 @@ class App:
         # Fixed lobby layout: players card (left), rule-mods card (right).
         self.lobby_host_y = 420
         self.rounds_input.rect = pygame.Rect(610, 466, 110, 28)
+        self.wild_input.rect = pygame.Rect(740, 466, 110, 28)
+        self.wild_input_visible = self._wild_mod_enabled()
         self.lobby_rename_input.rect = pygame.Rect(90, 632, 300, 30)
         self.buttons.append(Button((400, 632, 140, 30), self._t("btn_rename"),
                                    self._rename_click))
@@ -992,7 +999,21 @@ class App:
 
     def _start_game_click(self):
         r = self._parse_int(self.rounds_input.text, 0)
-        self._send({"t": "start_game", "rounds": r if r >= 2 else None})
+        wild = None
+        if self._wild_mod_enabled():
+            wild = self._parse_int(self.wild_input.text, -1)
+            if wild < 0:
+                self.wild_input.text = "0"
+                wild = 0
+        self._send({"t": "start_game", "rounds": r if r >= 2 else None, "wild": wild})
+
+    def _wild_mod_enabled(self):
+        """True when the Wild Card rule mod is enabled on this client."""
+        try:
+            return any(str(m.get("id", "")).lower() == "wild_card"
+                       for m in mods.rules_mods())
+        except Exception:  # noqa: BLE001 - mods may not be loadable
+            return False
 
     def _my_ready(self, info):
         joined = (info or {}).get("joined", [])
@@ -1042,7 +1063,7 @@ class App:
             sel = i in self.selected
             ct = c["type"]
             royal = ct in game.ROYAL_TYPES
-            contra = ct in game.CONTRABAND or royal
+            contra = ct in game.CONTRABAND or royal or bool(c.get("super"))
             if royal:
                 eq = c.get("equals") or game.ROYAL_GOODS.get(ct, {}).get("equals", 2)
                 of = self._tn(c.get("of") or game.ROYAL_TYPE_OF.get(ct, ""))
@@ -1111,6 +1132,12 @@ class App:
                                        lambda: self._inspect_decision("inspect")))
             self.buttons.append(Button((330, 610, 150, 42), self._t("btn_counter"),
                                        lambda: self._sheriff_counter(), enabled=can_counter))
+            intel = v.get("intel") or {}
+            if intel.get("available"):
+                self.buttons.append(Button(
+                    (500, 610, 170, 42),
+                    self._t("btn_intel", cost=intel.get("cost", 0)),
+                    lambda: self._send({"t": "sheriff_intel"})))
         elif kind == "counter_bribe":
             can_counter = prompt.get("round", 0) < prompt.get("max_round", 99)
             self.buttons.append(Button((40, 610, 140, 42), self._t("btn_accept"),
@@ -1889,6 +1916,10 @@ class App:
             t = get_font(16).render(self._t("lbl_rounds"), True, COLOR_TEXT)
             self.screen.blit(t, (610, hy + 24))
             self.rounds_input.draw(self.screen)
+            if getattr(self, "wild_input_visible", False):
+                t = get_font(16).render(self._t("lbl_wild"), True, COLOR_TEXT)
+                self.screen.blit(t, (740, hy + 24))
+                self.wild_input.draw(self.screen)
             t = get_font(17).render(self._t("bots_title"), True, COLOR_ACCENT)
             self.screen.blit(t, (610, hy + 82))
             t = get_font(13).render(self._t("pers_title"), True, COLOR_TEXT)

@@ -13,6 +13,7 @@ v1.2.3 fixes **"mod.json not writable" after installing under Program Files**: t
 v1.3.0 adds an in-game **Mods Market** (browse the GitHub-hosted catalog, one-click download & install), ships **5 text-only reskin mods** (cyberpunk / medieval / starlight / steampunk / arcane), and makes server **chat messages follow the local reskin** ? reskins are client-side only, so each player online sees their own version.
 v1.4.0 adds **rule mods** (gameplay-changing mods) with a **server-side room check**: everyone in a room must have the same rule mods installed (id + version), the lobby shows each player's mod status and offers **one-click download & install** of missing rule mods. Ships two example rule mods (**Marathon Market**, **Spice Road**).
 v1.4.1 adds **player profiles & avatars**: your name + avatar are saved in `%APPDATA%/SheriffOfNottingham/profile.json` and restored on every launch; pick one of **8 built-in avatars** or **upload your own picture** (auto-downscaled and shared with everyone in the room); avatars appear in the menu, lobby, player panels and results screen. The **5 reskin mods now include themed avatar palettes** matching their world. Also: the **Mods/Market screens list every mod** (Spice Road is no longer hidden), a **Restart Game** button appears after enabling or installing mods, and the **update-restart flow is fixed** (single-CRLF batch file, waits for the old process to fully exit). New gameplay-mod ideas are detailed in **MOD_IDEAS.md** for review.
+v1.6.6 adds four new **rule mods**: **Wild Card** (the host sets how many wild cards go into the deck; they are legal goods, and any wild card in your bag automatically becomes the goods you declared when inspected), **Sheriff Intel** (once per round the Sheriff may pay n coins - the total cards left in the un-inspected bags - to learn how many contraband cards remain among the waiting merchants, as a range such as 0-2 or 3-5, only when at least two merchants are still waiting), **Super Contraband** (each contraband type gets one super card worth triple its value and triple its fine), and **Merchant Reputation v2** (legal goods that simply don't match your declared type no longer cost reputation; positive reputation makes you draw legal goods more often - at reputation 5 each card is 90% legal; negative reputation raises contraband odds but is tuned down to leave room to recover). All bundled mod versions are synced with the game build (1.6.6).
 
 ## Files
 
@@ -29,7 +30,7 @@ market.py    Mod market: remote catalog + one-click download & install
 mods_market.json  Mod market catalog (raw + jsDelivr CDN)
 mods_pack/   Packed mod zips served to the in-game market
 main.py      Entry point (--version shows the version dialog)
-version.py   __version__ = "1.3.0"
+version.py   __version__ = "1.6.6"
 installer.iss  Inno Setup script that builds the installer
 test_bot.py  Headless bot automation test (full game + reconnect)
 test_ai_bots.py  Test for in-lobby AI bots (host adds bots, plays a full game)
